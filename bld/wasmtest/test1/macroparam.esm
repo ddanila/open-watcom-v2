@@ -1,0 +1,17 @@
+.387
+.386p
+		PUBLIC	myst
+DGROUP		GROUP	_DATA
+_TEXT		SEGMENT	DWORD PUBLIC USE32 'CODE'
+_TEXT		ENDS
+_DATA		SEGMENT	DWORD PUBLIC USE32 'DATA'
+myst:
+    DB	0, 0, 0, 0, 0, 0, 0, 0
+    DB	0, 0, 0, 0, 0, 0, 0, 0
+    DB	0, 0, 0, 0
+L$1:
+    DB	0, 0, 0, 0, 66H, 0a3H
+    DD	offset DGROUP:L$1
+
+_DATA		ENDS
+		END
