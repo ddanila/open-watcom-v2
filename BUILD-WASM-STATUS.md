@@ -53,6 +53,7 @@ At the time this note was written:
 - the `boot` build completed
 - there was no `rel/` directory yet
 - there was no final packaged host `wasm` under a `rel/bin*` directory
+- `master` contains this note so the local build state is recorded in-tree
 
 ## Debug Output Meaning
 
@@ -67,6 +68,20 @@ There are two separate debug concepts for `wasm`:
 The `DEBUG_OUT` define is enabled by building `wasm` with `debug=2`, as wired
 in `bld/wasm/master.mif`.
 
+## What Failed Before `boot`
+
+An attempt to build the host `linuxx64` `wasm` target before the full bootstrap
+stage failed because required build libraries were not available yet.
+
+The relevant failure was:
+
+```text
+/usr/bin/ld: cannot find ../../../bld/watcom/linuxx64/clibext.lib: No such file or directory
+```
+
+This is why `./build.sh boot` is a prerequisite before trying to build
+`bld/wasm/linuxx64` directly.
+
 ## Next Steps
 
 To build the Linux x64 host `wasm` target with internal debug output enabled:
@@ -78,6 +93,10 @@ cd bld/wasm/linuxx64
 "$OWROOT/build/$OWOBJDIR/wmake" -f makefile clean debug=2
 "$OWROOT/build/$OWOBJDIR/wmake" -f makefile debug=2
 ```
+
+This command should produce a non-bootstrap host build of `wasm` for Linux x64.
+The exact final artifact path still needs to be confirmed after running the
+commands above.
 
 After that build, verify:
 
@@ -98,6 +117,49 @@ and then, after the `debug=2` target build:
 path/to/wasm -d6 sample.asm
 path/to/wasm -d1 sample.asm
 ```
+
+Minimal smoke test source:
+
+```asm
+.model small
+.code
+start:
+    mov ax, 4c00h
+    int 21h
+end start
+```
+
+Use it to confirm:
+
+- `-d1` completes successfully and emits object output with line debug support
+- `-d6` actually prints internal assembler diagnostics on the debug-enabled host
+  build
+
+## Expected Build Shapes
+
+There are three relevant build states for this work:
+
+1. `preboot`
+   Produces the minimum build tools needed to continue bootstrapping.
+2. `boot`
+   Produces bootstrap host tools in `build/binbuild/`, including `bwasm`.
+3. host `wasm` with `debug=2`
+   Intended to produce a host-built Linux x64 `wasm` binary with `DEBUG_OUT`
+   enabled so `-d6` can be exercised.
+
+If a full release-style tree is needed later, expect that to come from a later
+top-level builder flow rather than from `boot` alone.
+
+## Known Unknowns
+
+The following items still need direct confirmation:
+
+- the exact output path of the Linux x64 non-bootstrap `debug=2` `wasm` binary
+- whether `-d6` emits useful internal trace output on that binary
+- whether the final host-built binary is named `wasm`, `wasm.exe`, or copied to
+  another generated path
+- whether a later `builder build` or `builder rel` step is desired for this
+  work, or whether the host `debug=2` binary alone is sufficient
 
 ## Goal
 
