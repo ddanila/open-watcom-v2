@@ -276,6 +276,13 @@
 :usage. 
 :jusage. 
 
+:option. d6
+:target. dbg
+:enumerate. debug_info
+:internal.
+:usage. internal debug output
+:jusage. internal debug output
+
 :option. ee
 :usage. stop reading ASM file at END directive
 :jusage. ENDディレクティブでASMファイルの読み込みを止めます

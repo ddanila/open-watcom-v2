@@ -169,3 +169,47 @@ so `-d6` can be used when debugging assembler behavior locally.
 
 The longer-term goal, if needed, is a full non-bootstrap release-style build
 that produces final host artifacts under `rel/`.
+
+## Confirmed MSGSERV Macro Bug
+
+The original `MSGSERV` struct-offset failure in the `~/fun/msdos` tree is now
+confirmed and fixed in the compiler.
+
+Observed failure before the fix:
+
+- `test_struct_bug/run_test.sh` reproduced `$M_RT.$M_CLASS_ADDRS` as `RT+0x2D`
+  instead of the correct `RT+0x2C`
+- the same bad code generation appeared in the real
+  `MS-DOS/v4.0/src/CMD/TREE/TREESYSM.ASM` path when assembled through the
+  `MSGSERV` macro stack
+
+Root cause:
+
+- the bug was not in struct field lookup itself
+- `wasm` was expanding constants on `MACRO` definition lines before recording
+  formal parameter names
+- in `SYSMSG.INC`, the formal parameter `nummsg` in
+  `$M_BUILD_PTRS Macro nummsg` could therefore be rewritten to `0` because the
+  global symbol `NUMmsg` already existed
+- that corrupted stored macro lines such as `$M_INDEX = 0`, which later
+  expanded using the invocation argument and shifted `$M_RT.$M_CLASS_ADDRS`
+  references by `+1`
+
+Compiler fix:
+
+- [bld/wasm/c/breakout.c](/home/ddanila/fun/open-watcom-v2/bld/wasm/c/breakout.c)
+  now treats `T_MACRO` the same as `T_NAME` in `directive()`
+- this preserves formal parameter names and prevents premature constant
+  expansion on macro definition lines
+
+Verification:
+
+- the committed `test_struct_bug` reproducer now passes
+- `MS-DOS/v4.0/src/CMD/TREE/TREESYSM.ASM` assembles successfully against the
+  fixed host `wasm`
+
+Separate note:
+
+- `MS-DOS/v4.0/src/CMD/DEBUG/DEBUG.ASM` currently hits a different `wasm`
+  internal assertion in `asmins.c(2626)`; that is distinct from the fixed
+  `MSGSERV` offset bug
