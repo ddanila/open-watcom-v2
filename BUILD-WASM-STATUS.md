@@ -213,3 +213,35 @@ Separate note:
 - `MS-DOS/v4.0/src/CMD/DEBUG/DEBUG.ASM` currently hits a different `wasm`
   internal assertion in `asmins.c(2626)`; that is distinct from the fixed
   `MSGSERV` offset bug
+
+## Confirmed DOS EOF Marker Bug
+
+The later `DEBUG.ASM` assertion turned out to be a separate input-reading bug.
+
+Observed failure before the fix:
+
+- assembling `MS-DOS/v4.0/src/CMD/DEBUG/DEBUG.ASM` hit an internal assertion in
+  `asmins.c`
+- the same crash can be reproduced with a minimal source whose first line is a
+  bare DOS EOF marker byte (`0x1A`)
+
+Root cause:
+
+- the source line reader in `bld/wasm/c/asmline.c` did not treat `0x1A`
+  (`Ctrl-Z`, DOS text EOF) as end-of-file
+- that byte was passed through the scanner as a standalone string token
+- the parser then reached an impossible token-class path and asserted in
+  `asmins.c`
+
+Compiler fix:
+
+- `get_asmline()` in
+  [bld/wasm/c/asmline.c](/home/ddanila/fun/open-watcom-v2/bld/wasm/c/asmline.c)
+  now stops on unquoted `0x1A`, matching DOS text-file EOF semantics
+
+Verification:
+
+- new regression harness `test_ctrl_z_eof/run_test.sh` no longer crashes
+- `MS-DOS/v4.0/src/CMD/DEBUG/DEBUG.ASM` now assembles successfully
+- full `MS-DOS/v4.0/src/CMD/DEBUG/DEBUG.COM` now builds through assemble, link,
+  and convert steps
