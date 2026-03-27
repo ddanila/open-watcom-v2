@@ -1236,6 +1236,7 @@ bool PubDef( token_buffer *tokbuf, token_idx i )
           && strcmp( name, dir->sym.name ) != 0
           && stricmp( name, dir->sym.name ) == 0 ) {
             AsmChangeName( dir->sym.name, name );
+            dir = (dir_node_handle)AsmGetSymbol( name );
         }
         SetMangler( &dir->sym, mangle_type, lang_type );
         if( !dir->sym.public ) {
