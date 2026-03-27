@@ -85,7 +85,8 @@ wincall.dis &
 word.dis &
 x.dis &
 xx.dis &
-macroparam.dis
+macroparam.dis &
+macrodefault.dis
 
 asm_flags_x = -c
 asm_flags_loader2 = -c
