@@ -44,7 +44,9 @@ loader2.dis &
 lods.dis &
 maaak.dis &
 macro.dis &
+macrodefault.dis &
 macroloc.dis &
+macroparam.dis &
 macrotst.dis &
 main.dis &
 mainnew.dis &
@@ -84,9 +86,7 @@ tn.dis &
 wincall.dis &
 word.dis &
 x.dis &
-xx.dis &
-macroparam.dis &
-macrodefault.dis
+xx.dis
 
 asm_flags_x = -c
 asm_flags_loader2 = -c
