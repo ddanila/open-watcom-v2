@@ -312,7 +312,7 @@ static bool AddPredefinedConstant( char *name, const_info *info )
         return( RC_ERROR );
     }
     if( !dir->e.constinfo->predef ) {
-        FreeInfo( dir );
+        dir_fini( dir );
         dir->e.constinfo = info;
     }
     return( RC_OK );
@@ -741,7 +741,7 @@ void dir_to_sym( dir_node_handle dir )
  * Remove node type/info to be symbol only again
  */
 {
-    FreeInfo( dir );
+    dir_fini( dir );
     dir_reset( dir );
     dir->sym.state = SYM_UNDEFINED;
 }
@@ -751,7 +751,7 @@ void dir_change( dir_node_handle dir, int tab )
  * Change node type and insert it into the table specified by tab
  */
 {
-    FreeInfo( dir );
+    dir_fini( dir );
     dir_reset( dir );
     dir_init( dir, tab );
 }
@@ -784,7 +784,7 @@ static void set_macro__at_code( const char *name )
     strcpy( code_segment_name, get_sim_name( SIM_CODE, name ) );
 }
 
-void FreeInfo( dir_node_handle dir )
+void dir_fini( dir_node_handle dir )
 /**********************************/
 {
     int i;
@@ -1057,8 +1057,8 @@ static int token_cmp( const char *token, int start, int end )
     return( TOK_INVALID );      // No type is found
 }
 
-bool CheckForLang( token_buffer *tokbuf, token_idx i, int *lang )
-/***************************************************************/
+bool CheckForLang( token_buffer *tokbuf, token_idx i, lang_type *langtype )
+/*************************************************************************/
 {
     const char  *token;
     int         lang_idx;
@@ -1074,40 +1074,40 @@ bool CheckForLang( token_buffer *tokbuf, token_idx i, int *lang )
             lang_idx = token_cmp( token, TOK_LANG_BASIC, TOK_LANG_SYSCALL );
         }
         if( lang_idx != TOK_INVALID ) {
-            *lang = TypeInfo[lang_idx].value;
+            *langtype = TypeInfo[lang_idx].value;
             return( RC_OK );
         }
     }
     return( RC_ERROR );
 }
 
-static int GetLangType( token_buffer *tokbuf, token_idx *i )
-/**********************************************************/
+static lang_type GetLangType( token_buffer *tokbuf, token_idx *i )
+/****************************************************************/
 {
-    int         lang_type;
+    lang_type       langtype;
 
-    if( CheckForLang( tokbuf, *i, &lang_type ) ) {
+    if( CheckForLang( tokbuf, *i, &langtype ) ) {
         return( ModuleInfo.langtype );
     }
     (*i)++;
-    return( lang_type );
+    return( langtype );
 }
 
-static const char *Check4Mangler( token_buffer *tokbuf, token_idx *i )
-/********************************************************************/
+static mangle_func  Check4Mangler( token_buffer *tokbuf, token_idx *i )
+/*********************************************************************/
 {
-    const char  *mangle_type = NULL;
+    mangle_func     mangler;
 
-    if( tokbuf->tokens[*i].class == TC_STRING ) {
-        mangle_type = tokbuf->tokens[*i].string_ptr;
+    if( tokbuf->tokens[*i].class != TC_STRING )
+        return( NULL );
+    mangler = GetMangler( tokbuf->tokens[*i].string_ptr );
+    (*i)++;
+    if( tokbuf->tokens[*i].class != TC_COMMA ) {
+        AsmWarn( 2, EXPECTING_COMMA );
+    } else {
         (*i)++;
-        if( tokbuf->tokens[*i].class != TC_COMMA ) {
-            AsmWarn( 2, EXPECTING_COMMA );
-        } else {
-            (*i)++;
-        }
     }
-    return( mangle_type );
+    return( mangler );
 }
 
 bool ExtDef( token_buffer *tokbuf, token_idx i, bool glob_def )
@@ -1115,18 +1115,18 @@ bool ExtDef( token_buffer *tokbuf, token_idx i, bool glob_def )
 {
     const char      *name;
     const char      *typetoken;
-    const char      *mangle_type = NULL;
+    mangle_func     mangler;
     int             type;
     memtype         mem_type;
     dir_node_handle dir;
-    int             lang_type;
+    lang_type       langtype;
 
-    mangle_type = Check4Mangler( tokbuf, &i );
+    mangler = Check4Mangler( tokbuf, &i );
     for( ; i < tokbuf->count; i++ ) {
         /*
          * get the symbol language type if present
          */
-        lang_type = GetLangType( tokbuf, &i );
+        langtype = GetLangType( tokbuf, &i );
         /*
          * get the symbol name
          */
@@ -1165,14 +1165,14 @@ bool ExtDef( token_buffer *tokbuf, token_idx i, bool glob_def )
             AsmError( EXT_DEF_DIFF );
             return( RC_ERROR );
         } else if( dir->sym.state != SYM_EXTERNAL ) {
-            SetMangler( &dir->sym, mangle_type, lang_type );
+            SetMangler( &dir->sym, mangler, langtype );
             if( glob_def
               && !dir->sym.public ) {
                 AddPublicData( dir );
             }
             return( RC_OK );
         } else {
-            SetMangler( &dir->sym, mangle_type, lang_type );
+            SetMangler( &dir->sym, mangler, langtype );
             return( RC_OK );
         }
 
@@ -1185,7 +1185,7 @@ bool ExtDef( token_buffer *tokbuf, token_idx i, bool glob_def )
         dir->sym.offset = 0;
         // FIXME !! symbol can have different type
         dir->sym.mem_type = mem_type;
-        SetMangler( &dir->sym, mangle_type, lang_type );
+        SetMangler( &dir->sym, mangler, langtype );
     }
     return( RC_OK );
 }
@@ -1194,16 +1194,16 @@ bool PubDef( token_buffer *tokbuf, token_idx i )
 /**********************************************/
 {
     const char      *name;
-    const char      *mangle_type = NULL;
+    mangle_func     mangler;
     dir_node_handle dir;
-    int             lang_type;
+    lang_type       langtype;
 
-    mangle_type = Check4Mangler( tokbuf, &i );
+    mangler = Check4Mangler( tokbuf, &i );
     for( ; i < tokbuf->count; i += 2 ) {
         /*
          * get the symbol language type if present
          */
-        lang_type = GetLangType( tokbuf, &i );
+        langtype = GetLangType( tokbuf, &i );
         /*
          * get the symbol name
          */
@@ -1225,7 +1225,7 @@ bool PubDef( token_buffer *tokbuf, token_idx i )
                 return( PubDef( tokbuf, i ) );
             }
         }
-        SetMangler( &dir->sym, mangle_type, lang_type );
+        SetMangler( &dir->sym, mangler, langtype );
         if( !dir->sym.public ) {
             /*
              * put it into the pub table
@@ -3355,7 +3355,7 @@ static bool proc_exam( dir_node_handle proc, token_buffer *tokbuf, token_idx i )
             /*
              * name mangling
              */
-            SetMangler( &proc->sym, token, WASM_LANG_NONE );
+            SetMangler( &proc->sym, GetMangler( token ), WASM_LANG_NONE );
             continue;
         }
 
@@ -3416,7 +3416,7 @@ static bool proc_exam( dir_node_handle proc, token_buffer *tokbuf, token_idx i )
                     regs_list   *tmpreg;
 
                     for( tmpreg = info->regslist; tmpreg->next != NULL; tmpreg = tmpreg->next )
-                    	/* nothing*/;
+                        /* nothing*/;
                     tmpreg->next = regist;
                 }
             }
@@ -4145,15 +4145,15 @@ bool CommDef( token_buffer *tokbuf, token_idx i )
 {
     const char      *token;
     const char      *typetoken;
-    const char      *mangle_type = NULL;
+    mangle_func     mangler;
     int             type;
     int             distance;
     int             count;
     dir_node_handle dir;
-    int             lang_type;
+    lang_type       langtype;
     memtype         mem_type;
 
-    mangle_type = Check4Mangler( tokbuf, &i );
+    mangler = Check4Mangler( tokbuf, &i );
     for( ; i < tokbuf->count; i++ ) {
         count = 1;
         /*
@@ -4173,7 +4173,7 @@ bool CommDef( token_buffer *tokbuf, token_idx i )
         /*
          * get the symbol language type if present
          */
-        lang_type = GetLangType( tokbuf, &i );
+        langtype = GetLangType( tokbuf, &i );
         /*
          * get the symbol name
          */
@@ -4227,7 +4227,7 @@ bool CommDef( token_buffer *tokbuf, token_idx i )
         dir->sym.mem_type = mem_type;
         dir->e.extinfo->comm_size = count;
         dir->e.extinfo->comm_distance = TypeInfo[distance].value;
-        SetMangler( &dir->sym, mangle_type, lang_type );
+        SetMangler( &dir->sym, mangler, langtype );
     }
     return( RC_OK );
 }

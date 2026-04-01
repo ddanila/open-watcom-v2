@@ -342,7 +342,7 @@ void AsmTakeOut( const char *name )
         /* found it -- so take it out */
         sym = *sym_ptr;
         *sym_ptr = sym->next;
-        FreeInfo( (dir_node_handle)sym );
+        dir_fini( (dir_node_handle)sym );
         FreeASym( sym );
     }
     return;
@@ -458,7 +458,7 @@ void AsmSymFini( void )
     for( i = 0; i < HASH_TABLE_SIZE; i++ ) {
         for( sym = sym_table[i]; sym != NULL; sym = next ) {
             next = sym->next;
-            FreeInfo( (dir_node_handle)sym );
+            dir_fini( (dir_node_handle)sym );
             FreeASym( sym );
         }
     }
@@ -751,7 +751,7 @@ static void DumpSymbol( asm_sym_handle sym )
 //    dir_node_handle dir;
     char        *type;
     char        value[512];
-    const char  *langtype;
+    const char  *langstr;
     char        *public;
 
 //    dir = (dir_node_handle)sym;
@@ -841,8 +841,8 @@ static void DumpSymbol( asm_sym_handle sym )
     } else {
         public = "";
     }
-    langtype = get_sym_lang( sym );
-    DoDebugMsg( "%-30s\t%s\t%s%s\t%8X\t%s\n", sym->name, type, public, langtype, sym->offset, value );
+    langstr = get_sym_lang( sym );
+    DoDebugMsg( "%-30s\t%s\t%s%s\t%8X\t%s\n", sym->name, type, public, langstr, sym->offset, value );
 }
 
 void DumpASym( void )
