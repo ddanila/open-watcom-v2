@@ -29,7 +29,6 @@
 *
 ****************************************************************************/
 
-/* NOP: CI test change — will be reverted */
 
 #include "asmglob.h"
 #include <ctype.h>
