@@ -1,16 +1,16 @@
 name: CI
-run-name: CI Build & Test (Linux)
+run-name: "CI Build & Test (Linux) — ${{inputs.ref}}"
 
 on:
-  pull_request:
-    branches: '*'
-  push:
-    branches:
-      - master
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to test'
+        required: true
+        type: string
 
 concurrency:
-  group: ${{github.workflow}}-${{github.ref}}
+  group: ${{github.workflow}}-${{inputs.ref}}
   cancel-in-progress: true
 
 env:
@@ -25,10 +25,13 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v6
+      with:
+        ref: ${{inputs.ref}}
     - name: Detect changed paths
       uses: dorny/paths-filter@v4
       id: filter
       with:
+        base: master
         filters: |
           src:
             - 'bld/**'
@@ -69,10 +72,6 @@ jobs:
       shell: bash
       run: |
         run_all=false
-        # On push to master or manual dispatch, always run all tests
-        if [ "${{github.event_name}}" != "pull_request" ]; then
-          run_all=true
-        fi
         # If core/shared components changed, run all tests
         if [ "${{steps.filter.outputs.core}}" = "true" ]; then
           run_all=true
@@ -103,6 +102,8 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v6
+      with:
+        ref: ${{inputs.ref}}
     - name: Cache build output
       id: cache
       uses: actions/cache@v4
@@ -175,6 +176,8 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v6
+      with:
+        ref: ${{inputs.ref}}
     - name: Set OW environment
       if: contains(needs.detect-changes.outputs.test_suites, matrix.path)
       uses: ./.github/actions/setowenv
