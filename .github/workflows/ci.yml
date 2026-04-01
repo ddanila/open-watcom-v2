@@ -17,39 +17,137 @@ env:
   OWUSETARARCHIVE: '1'
 
 jobs:
-  boot:
-    name: Bootstrap
+  detect-changes:
+    name: Detect changes
     runs-on: ubuntu-latest
+    outputs:
+      test_suites: ${{steps.set-tests.outputs.suites}}
     steps:
     - name: checkout
       uses: actions/checkout@v6
-    - name: Bootstrap
-      uses: ./.github/actions/boot
+    - name: Detect changed paths
+      uses: dorny/paths-filter@v3
+      id: filter
       with:
-        args:    gcc
-        suffix:  lnx x64 gcc
-        owtools: GCC
+        filters: |
+          src:
+            - 'bld/**'
+            - 'ci/**'
+            - 'cmnvars.sh'
+          core:
+            - 'bld/watcom/**'
+            - 'bld/cg/**'
+            - 'bld/wl/**'
+            - 'bld/owl/**'
+            - 'bld/orl/**'
+            - 'bld/dwarf/**'
+            - 'bld/lib_misc/**'
+            - 'bld/hdr/**'
+            - 'bld/builder/**'
+            - 'ci/**'
+            - 'cmnvars.sh'
+          wmake:
+            - 'bld/wmake/**'
+            - 'bld/wmaktest/**'
+          wasm:
+            - 'bld/wasm/**'
+            - 'bld/wasmtest/**'
+          cc:
+            - 'bld/cc/**'
+            - 'bld/ctest/**'
+          plusplus:
+            - 'bld/plusplus/**'
+            - 'bld/plustest/**'
+          f77:
+            - 'bld/f77/**'
+            - 'bld/f77test/**'
+          clib:
+            - 'bld/clib/**'
+            - 'bld/clibtest/**'
+    - name: Select test suites
+      id: set-tests
+      shell: bash
+      run: |
+        run_all=false
+        # On push to master or manual dispatch, always run all tests
+        if [ "${{github.event_name}}" != "pull_request" ]; then
+          run_all=true
+        fi
+        # If core/shared components changed, run all tests
+        if [ "${{steps.filter.outputs.core}}" = "true" ]; then
+          run_all=true
+        fi
+
+        suites=""
+        add() { suites="${suites:+$suites,}$1"; }
+
+        if [ "$run_all" = "true" ] || [ "${{steps.filter.outputs.wmake}}" = "true" ]; then add wmaktest; fi
+        if [ "$run_all" = "true" ] || [ "${{steps.filter.outputs.wasm}}" = "true" ]; then add wasmtest; fi
+        if [ "$run_all" = "true" ] || [ "${{steps.filter.outputs.cc}}" = "true" ]; then add ctest; fi
+        if [ "$run_all" = "true" ] || [ "${{steps.filter.outputs.plusplus}}" = "true" ]; then add plustest; fi
+        if [ "$run_all" = "true" ] || [ "${{steps.filter.outputs.f77}}" = "true" ]; then add f77test; fi
+        if [ "$run_all" = "true" ] || [ "${{steps.filter.outputs.clib}}" = "true" ]; then add clibtest; fi
+
+        # Safety net: source changed but no specific filter matched — run all
+        if [ -z "$suites" ] && [ "${{steps.filter.outputs.src}}" = "true" ]; then
+          suites="wmaktest,wasmtest,ctest,plustest,f77test,clibtest"
+        fi
+
+        echo "suites=$suites" >> "$GITHUB_OUTPUT"
+        echo "Test suites to run: ${suites:-none}"
 
   build:
     name: Build
-    needs: boot
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
     - name: checkout
       uses: actions/checkout@v6
-    - name: Install DOSBOX
-      uses: ./.github/actions/dosboxin
-    - name: Build
-      uses: ./.github/actions/build
+    - name: Cache build output
+      id: cache
+      uses: actions/cache@v4
       with:
-        args:    gcc
-        gitpath: rel
-        suffix:  lnx x64 gcc
-        owtools: GCC
+        path: |
+          build/binbuild
+          rel
+        key: ow-build-linux-gcc-${{hashFiles('bld/**', 'ci/**', 'cmnvars.sh')}}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      name: Install DOSBOX
+      run: |
+        sudo apt-get update --fix-missing
+        sudo apt-get install -y dosbox
+      shell: bash
+    - if: steps.cache.outputs.cache-hit != 'true'
+      name: Bootstrap
+      run: ci/buildx.sh gcc
+      env:
+        OWBUILD_STAGE: boot
+        OWTOOLS:       GCC
+        OWROOT:        ${{github.workspace}}
+        OWVERBOSE:     '1'
+    - if: steps.cache.outputs.cache-hit != 'true'
+      name: Build
+      run: ci/buildx.sh gcc
+      env:
+        OWBUILD_STAGE: build
+        OWTOOLS:       GCC
+        OWROOT:        ${{github.workspace}}
+        OWDOSBOX:      dosbox
+        OWVERBOSE:     '1'
+    - name: Upload build artifacts
+      uses: ./.github/actions/artfsave
+      with:
+        gitpath:  'build binbuild'
+        artifact: build lnx x64 gcc
+    - name: Upload rel artifacts
+      uses: ./.github/actions/artfsave
+      with:
+        gitpath:  rel
+        artifact: rel lnx x64 gcc
 
   tests:
-    needs: build
+    needs: [build, detect-changes]
+    if: needs.detect-changes.outputs.test_suites != ''
     strategy:
       matrix:
         include:
@@ -78,11 +176,13 @@ jobs:
     - name: checkout
       uses: actions/checkout@v6
     - name: Set OW environment
+      if: contains(needs.detect-changes.outputs.test_suites, matrix.path)
       uses: ./.github/actions/setowenv
       with:
         suffix: lnx x64 gcc
         bits:   '64'
     - name: ${{matrix.title}}
+      if: contains(needs.detect-changes.outputs.test_suites, matrix.path)
       uses: ./.github/actions/tests
       with:
         suffix: lnx x64 gcc
