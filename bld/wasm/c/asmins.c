@@ -1769,7 +1769,9 @@ static bool idata_fixup( token_buffer *tokbuf, expr_list *opndx )
         }
     }
     ConstantOnly = true;
-    Code->info.opcode |= W_BIT;
+    if( !MEM_TYPE( Code->mem_type, BYTE ) ) {
+        Code->info.opcode |= W_BIT;
+    }
 
 #if defined( _STANDALONE_ )
     find_frame( opndx->sym );
