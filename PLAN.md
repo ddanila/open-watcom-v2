@@ -17,7 +17,7 @@ using upstream sources and CVE patches as references.
 | bzip2    | 1.0.3          | `contrib/bzip2/`   |
 | zlib     | 1.2.3          | `contrib/zlib/`    |
 | TinyXML  | 2.5.3          | `contrib/tinyxml/` |
-| libzip   | ~0.7 (2005)    | `contrib/libzip/`  |
+| libzip   | 0.6.1 (2005)   | `contrib/libzip/`  |
 
 ## Proposed PRs (in order of priority / independence)
 
@@ -71,21 +71,30 @@ using upstream sources and CVE patches as references.
   - `6458ef88` Let's try that again
 - **Why third**: Largest file count; touches build system; may need bootstrap verification.
 
-### PR 4: Backport CVE patches to bundled libzip
-- **Scope**: `contrib/libzip/lib/` (2 files)
-- **CVEs addressed**: CVE-2011-0421, CVE-2015-2331
-- **What to do**:
-  1. Backport CVE-2011-0421 fix (null pointer deref in `zip_name_locate`)
-  2. Backport CVE-2015-2331 fix (integer overflow)
-  3. Replace deprecated `stricmp` with `strcasecmp`
-- **References from #1369 commits**:
-  - `d8d80586` Backport CVE patches
-- **Why last**: Only 2 files, minimal risk, quick to review.
-  Could also be done first if we want a quick win.
+### PR 4: Backport CVE patches to bundled libzip -- DONE
+- **PR**: https://github.com/open-watcom/open-watcom-v2/pull/1616
+- **Branch**: `libzip-cve-backports`
+- **Scope**: `contrib/libzip/lib/` (3 files changed, 44 insertions, 7 deletions)
+- **Approach**: Backport only (full upgrade not feasible -- API broke in 0.11+)
+- **CVEs addressed**:
+  - CVE-2012-1162 (HIGH): heap buffer overflow in `_zip_readcdir`
+  - CVE-2012-1163 (MEDIUM): integer overflow in central directory parsing
+  - CVE-2015-2331 (HIGH): integer overflow in `_zip_cdir_new`
+  - CVE-2017-12858 variant: memory leak on error paths in `_zip_dirent_read`
+- **CVEs assessed, not applicable**:
+  - CVE-2011-0421: already patched in bundled copy
+  - CVE-2017-14107: no ZIP64 support in 0.6.1
+  - CVE-2019-17582: different code pattern in 0.6.1 (leak, not UAF)
+- **Also fixed**: `stricmp` → `strcasecmp`, entry initialization in `_zip_readcdir`
+
+## Strategy per library
+
+- **Prefer full upgrade** when API is compatible and OW customizations are minimal
+- **Backport patches only** when the library is heavily customized or API has broken
+- Research ALL known CVEs for each library, not just those from PR #1369
 
 ## Notes
 
 - Each PR description will reference upstream PR #1369 for context
 - We will manually apply changes using upstream sources, not copy from #1369
 - Build verification should be done for each PR where feasible
-- The order above can be adjusted -- PR 4 (libzip) could be done first as a quick win
