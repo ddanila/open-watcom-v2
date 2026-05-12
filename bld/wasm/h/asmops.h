@@ -79,6 +79,35 @@ typedef enum asm_cpu {
 } asm_cpu;
 
 
+/*
+ * Token classes for string-like content
+ * --------------------------------------
+ *
+ * The lexer recognises three distinct kinds of "stringy" content. They live
+ * in their own classes rather than overloading one class, so consumers can
+ * pick the form they actually expect.
+ *
+ *   TC_STRING         '...' or "..." -- a real string literal. The opener
+ *                     is recorded on the token's .delim field so the macro
+ *                     re-wrap path can round-trip the original quote.
+ *
+ *   TC_RAW_TEXT       <...>, {...}, or an undelimited bareword fallback.
+ *                     Opaque text that consumers either splice verbatim
+ *                     (macro arg lists, struct initialisers) or treat as
+ *                     a parenthesised raw block. .delim holds the opening
+ *                     bracket char (or 0 for the bareword fallback).
+ *
+ *   TC_COMMENT_TEXT   The line tail following the COMMENT directive. Read
+ *                     directly by CommentDirective to locate the user-chosen
+ *                     terminator; not a "string" in any other sense.
+ *
+ * IS_STRING_TOKEN below is a transitional shim that returns true for both
+ * TC_STRING and TC_RAW_TEXT. Use it only where a directive legitimately
+ * accepts both (e.g. .ERRB/.ERRNB, struct field defaults, macro args).
+ * For sites where one specific form is required by syntax, check the
+ * class directly -- see direct.c's Check4Mangler / SegDef / proc_exam.
+ */
+
 typedef enum tok_class {
     TC_FINAL,
     TC_INSTR,
@@ -86,7 +115,7 @@ typedef enum tok_class {
     TC_ID,
     TC_REG,
     TC_STRING,           /* '...' or "..." quoted string literal */
-    TC_RAW_TEXT,         /* opaque body of <...> or {...} */
+    TC_RAW_TEXT,         /* opaque body of <...> or {...} (or undelim bareword) */
     TC_COMMENT_TEXT,     /* body of the COMMENT directive */
     TC_DIRECTIVE,
     TC_DIRECT_EXPR,
@@ -123,7 +152,7 @@ typedef enum tok_class {
 typedef struct asm_tok {
     tok_class           class;
     char                *string_ptr;
-    char                delim;          /* opening char: '/'\" for TC_STRING, </{ for TC_RAW_TEXT, 0 otherwise */
+    char                delim;          /* see tok_class block comment above; 0 if not applicable */
     union {
         long            value;
         float           float_value;
@@ -132,9 +161,6 @@ typedef struct asm_tok {
     } u;
 } asm_tok;
 
-/* True for tokens whose string_ptr holds user text that some directives
- * accept interchangeably (quoted strings vs <...> raw text). Consumers that
- * only want one form should check the exact class instead. */
 #define IS_STRING_TOKEN( cls )      ((cls) == TC_STRING || (cls) == TC_RAW_TEXT)
 
 #endif
