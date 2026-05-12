@@ -1098,7 +1098,8 @@ static mangle_func  Check4Mangler( token_buffer *tokbuf, token_idx *i )
 {
     mangle_func     mangler;
 
-    if( !IS_STRING_TOKEN( tokbuf->tokens[*i].class ) )
+    /* mangler is always quoted, e.g. PROC ... 'C' */
+    if( tokbuf->tokens[*i].class != TC_STRING )
         return( NULL );
     mangler = GetMangler( tokbuf->tokens[*i].string_ptr );
     (*i)++;
@@ -1602,9 +1603,9 @@ bool SegDef( token_buffer *tokbuf, token_idx i )
             i++;
         }
         for( ; i < tokbuf->count; i++ ) {
-            if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+            if( tokbuf->tokens[i].class == TC_STRING ) {
                 /*
-                 * the class name - the only token which is of type STRING
+                 * the class name is always quoted, e.g. SEGMENT PARA PUBLIC 'CODE'
                  */
                 token = tokbuf->tokens[i].string_ptr;
                 new_info->class_name = InsertClassLname( token );
@@ -3361,9 +3362,9 @@ static bool proc_exam( dir_node_handle proc, token_buffer *tokbuf, token_idx i )
     i++;
     for( ; i < tokbuf->count && tokbuf->tokens[i].class != TC_COMMA; i++ ) {
         token = tokbuf->tokens[i].string_ptr;
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        if( tokbuf->tokens[i].class == TC_STRING ) {
             /*
-             * name mangling
+             * name mangling -- always quoted, e.g. PROC ... 'C'
              */
             SetMangler( &proc->sym, GetMangler( token ), WASM_LANG_NONE );
             continue;
