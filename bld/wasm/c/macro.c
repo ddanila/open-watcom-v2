@@ -941,8 +941,8 @@ bool ExpandMacro( token_buffer *tokbuf )
                             char        *src;
 
                             if( arg_token_count == 0
-                              && IS_QUOTED_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
-                                arg_first_delim = STRING_TOKEN_DELIM( tokbuf->tokens[i].class );
+                              && tokbuf->tokens[i].class == TC_STRING ) {
+                                arg_first_delim = tokbuf->tokens[i].delim;
                             }
                             src = tokbuf->tokens[i].string_ptr;
                             while( *src != '\0' ) {

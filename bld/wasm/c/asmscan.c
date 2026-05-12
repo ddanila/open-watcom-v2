@@ -138,28 +138,27 @@ static bool get_string( asm_tok *tok, const char **input, char **output )
 
     symbol_o = **input;
 
+    tok->delim = symbol_o;
     switch( symbol_o ) {
     case '"':
-        tok->class = TC_STRING_DQUOTE;
-        symbol_c = 0;
-        break;  // end of string marker is the same
     case '\'':
-        tok->class = TC_STRING_SQUOTE;
+        tok->class = TC_STRING;
         symbol_c = 0;
         break;  // end of string marker is the same
     case '<':
-        tok->class = TC_STRING_ANGLE;
+        tok->class = TC_RAW_TEXT;
         symbol_c = '>';
         break;
     case '{':
-        tok->class = TC_STRING_BRACE;
+        tok->class = TC_RAW_TEXT;
         symbol_c = '}';
         break;
     default:
         /* this is an undelimited string,
-         * so just copy it until we hit something that looks like the end
-         */
-        tok->class = TC_STRING;
+         * so just copy it until we hit something that looks like the end.
+         * No real delimiter -- record 0 so consumers can tell. */
+        tok->class = TC_RAW_TEXT;
+        tok->delim = 0;
         for( count = 0; **input != '\0' && !isspace( **input ) && **input != ','; count++ ) {
             *(*output)++ = *(*input)++; /* keep the 2nd one */
         }
@@ -553,7 +552,8 @@ static bool get_comment( asm_tok *tok, const char **input, char **output )
     (*output) += len;
     *(*output)++ = '\0';
     *input += len;
-    tok->class = TC_STRING;
+    tok->class = TC_COMMENT_TEXT;
+    tok->delim = 0;
     tok->u.value = 0;
     return( RC_OK );
 }
@@ -687,6 +687,7 @@ void SetFinalToken( token_buffer *tokbuf, token_idx count )
         count = MAX_TOKEN_COUNT;
     tokbuf->tokens[count].class = TC_FINAL;
     tokbuf->tokens[count].string_ptr = NULL;
+    tokbuf->tokens[count].delim = 0;
     tokbuf->count = count;
 }
 
@@ -729,6 +730,7 @@ bool AsmScan( token_buffer *tokbuf, const char *string )
     i = 0;
     while( i < MAX_TOKEN_COUNT ) {
         tok[i].string_ptr = output_ptr;
+        tok[i].delim = 0;
         while( isspace( *ptr ) ) {
             ptr++;
         }

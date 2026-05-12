@@ -191,12 +191,12 @@ static last_seg_info    lastseg;        // last opened simplified segment
 
 static char         code_segment_name[MAX_LINE_LEN];
 
-static asm_tok      const_CodeSize =  { TC_NUM, NULL,              0 };
-static asm_tok      const_DataSize =  { TC_NUM, NULL,              0 };
-static asm_tok      const_Model =     { TC_NUM, NULL,              0 };
-static asm_tok      const_Interface = { TC_NUM, NULL,              0 };
-static asm_tok      const_data =      { TC_ID,  NULL,              0 };
-static asm_tok      const_code =      { TC_ID,  code_segment_name, 0 };
+static asm_tok      const_CodeSize =  { TC_NUM, NULL,              0, { 0 } };
+static asm_tok      const_DataSize =  { TC_NUM, NULL,              0, { 0 } };
+static asm_tok      const_Model =     { TC_NUM, NULL,              0, { 0 } };
+static asm_tok      const_Interface = { TC_NUM, NULL,              0, { 0 } };
+static asm_tok      const_data =      { TC_ID,  NULL,              0, { 0 } };
+static asm_tok      const_code =      { TC_ID,  code_segment_name, 0, { 0 } };
 
 static const_info   info_CodeSize =  { &const_CodeSize,  1, true, false, false };
 static const_info   info_DataSize =  { &const_DataSize,  1, true, false, false };
@@ -1793,10 +1793,7 @@ bool Include( token_buffer *tokbuf, token_idx i )
     switch( tokbuf->tokens[i].class ) {
     case TC_ID:
     case TC_STRING:
-    case TC_STRING_SQUOTE:
-    case TC_STRING_DQUOTE:
-    case TC_STRING_ANGLE:
-    case TC_STRING_BRACE:
+    case TC_RAW_TEXT:
     case TC_PATH:
         return( InputQueueFile( tokbuf->tokens[i].string_ptr ) );
     default:

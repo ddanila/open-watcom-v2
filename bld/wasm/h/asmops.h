@@ -85,11 +85,9 @@ typedef enum tok_class {
     TC_RES_ID,
     TC_ID,
     TC_REG,
-    TC_STRING,
-    TC_STRING_SQUOTE,
-    TC_STRING_DQUOTE,
-    TC_STRING_ANGLE,
-    TC_STRING_BRACE,
+    TC_STRING,           /* '...' or "..." quoted string literal */
+    TC_RAW_TEXT,         /* opaque body of <...> or {...} */
+    TC_COMMENT_TEXT,     /* body of the COMMENT directive */
     TC_DIRECTIVE,
     TC_DIRECT_EXPR,
     TC_NUM,
@@ -125,6 +123,7 @@ typedef enum tok_class {
 typedef struct asm_tok {
     tok_class           class;
     char                *string_ptr;
+    char                delim;          /* opening char: '/'\" for TC_STRING, </{ for TC_RAW_TEXT, 0 otherwise */
     union {
         long            value;
         float           float_value;
@@ -133,12 +132,9 @@ typedef struct asm_tok {
     } u;
 } asm_tok;
 
-#define IS_STRING_TOKEN( cls )      ((cls) == TC_STRING || (cls) == TC_STRING_SQUOTE \
-                                  || (cls) == TC_STRING_DQUOTE || (cls) == TC_STRING_ANGLE \
-                                  || (cls) == TC_STRING_BRACE)
-
-#define IS_QUOTED_STRING_TOKEN( cls )   ((cls) == TC_STRING_SQUOTE || (cls) == TC_STRING_DQUOTE)
-#define STRING_TOKEN_DELIM( cls )       ((cls) == TC_STRING_SQUOTE ? '\'' \
-                                      : ((cls) == TC_STRING_DQUOTE ? '"' : 0))
+/* True for tokens whose string_ptr holds user text that some directives
+ * accept interchangeably (quoted strings vs <...> raw text). Consumers that
+ * only want one form should check the exact class instead. */
+#define IS_STRING_TOKEN( cls )      ((cls) == TC_STRING || (cls) == TC_RAW_TEXT)
 
 #endif

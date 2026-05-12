@@ -245,10 +245,7 @@ static bool get_operand( expr_list *new, token_buffer *tokbuf, token_idx *start,
         new->value = tokbuf->tokens[i].u.value;
         break;
     case TC_STRING:
-    case TC_STRING_SQUOTE:
-    case TC_STRING_DQUOTE:
-    case TC_STRING_ANGLE:
-    case TC_STRING_BRACE:
+    case TC_RAW_TEXT:
         new->empty = false;
         new->type = EXPR_CONST;
         new->string = tokbuf->tokens[i].string_ptr;
@@ -1921,9 +1918,13 @@ static token_idx fix( expr_list *res, token_buffer *tokbuf, token_idx start, tok
         if( res->string == NULL ) {
             tokbuf->tokens[ start ].class = TC_NUM;
             tokbuf->tokens[ start ].u.value = res->value;
+            tokbuf->tokens[ start ].delim = 0;
             tokbuf->tokens[ start++ ].string_ptr = "";
         } else {
+            /* synthetic string from string-valued expression; no original
+             * opener exists, so delim=0 signals "no quote to re-wrap with" */
             tokbuf->tokens[ start ].class = TC_STRING;
+            tokbuf->tokens[ start ].delim = 0;
             tokbuf->tokens[ start++ ].string_ptr = res->string;
         }
 
