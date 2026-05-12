@@ -253,16 +253,45 @@ int AddFieldToStruct( asm_sym_handle sym, token_buffer *tokbuf, token_idx loc )
     f->value = MemAllocSafe( count + 1 );
     f->value[0] = '\0';
     for( i = loc + 1; ISVALID_IDX( i ); i++ ) {
+        char open_ch;
+        char close_ch;
+        char buf[2];
+
         if( tokbuf->tokens[i].class == TC_FINAL )
             break;
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
-            strcat( f->value, "<" );
+        /*
+         * For string-like tokens, the original opener/closer is restored
+         * around the body so a later lex of f->value sees the same form.
+         * Undelimited TC_RAW_TEXT (bareword fallback in get_string) is
+         * wrapped in <> so that re-lex stays raw text instead of becoming
+         * a symbol reference -- legacy behavior.
+         */
+        open_ch = 0;
+        close_ch = 0;
+        if( tokbuf->tokens[i].class == TC_STRING ) {
+            open_ch = tokbuf->tokens[i].delim;
+            close_ch = open_ch;
+        } else if( tokbuf->tokens[i].class == TC_RAW_TEXT ) {
+            open_ch = tokbuf->tokens[i].delim;
+            if( open_ch == '{' ) {
+                close_ch = '}';
+            } else {
+                open_ch = '<';
+                close_ch = '>';
+            }
+        }
+        if( open_ch ) {
+            buf[0] = open_ch;
+            buf[1] = '\0';
+            strcat( f->value, buf );
         }
         if( tokbuf->tokens[i].string_ptr != NULL ) {
             strcat( f->value, tokbuf->tokens[i].string_ptr );
         }
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
-            strcat( f->value, ">" );
+        if( close_ch ) {
+            buf[0] = close_ch;
+            buf[1] = '\0';
+            strcat( f->value, buf );
         }
         strcat( f->value, " " );
     }
