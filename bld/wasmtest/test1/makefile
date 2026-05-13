@@ -40,6 +40,7 @@ g.dis &
 getenv.dis &
 hello.dis &
 ifdefmac.dis &
+ifdif.dis &
 ifs.dis &
 ins.dis &
 jmpfword.dis &
