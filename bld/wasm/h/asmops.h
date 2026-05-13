@@ -131,6 +131,7 @@ typedef struct asm_tok {
         unsigned char   bytes[10];
         asm_token       token;
     } u;
+    unsigned char       space_before;   /* whitespace was skipped before this token in the source line; used by MASM/TASM modes to split macro args on whitespace */
 } asm_tok;
 
 #define IS_STRING_TOKEN( cls )      ((cls) == TC_STRING || (cls) == TC_STRING_SQUOTE \

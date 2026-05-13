@@ -931,6 +931,19 @@ bool ExpandMacro( token_buffer *tokbuf )
                           || i == tokbuf->count ) {
                             break;
                         }
+                        /*
+                         * MASM/TASM mode: a token preceded by whitespace
+                         * starts a new macro arg, just like a comma. This
+                         * matches MASM 5/6 and TASM behavior where macro
+                         * args are separated by commas OR whitespace.
+                         * WATCOM mode keeps the lax behavior so multi-
+                         * token expressions stay one arg without bracketing.
+                         */
+                        if( arg_token_count > 0
+                          && tokbuf->tokens[i].space_before
+                          && (Options.mode & MODE_WATCOM) == 0 ) {
+                            break;
+                        }
                         if( tokbuf->tokens[i].class == TC_NUM ) {
                             if( *tokbuf->tokens[i].string_ptr == 0 ) {
                                 p += sprintf( p, "%lu", tokbuf->tokens[i].u.value );
@@ -981,9 +994,13 @@ bool ExpandMacro( token_buffer *tokbuf )
                 if( arg_token_count == 1 )
                     param->delim = arg_first_delim;
                 /*
-                 * go past the comma
+                 * If we stopped on a comma, advance past it. In MASM/TASM
+                 * mode we may have stopped on a whitespace boundary instead;
+                 * the next token already is the next arg, so don't advance.
                  */
-                i++;
+                if( tokbuf->tokens[i].class == TC_COMMA ) {
+                    i++;
+                }
             }
         } else {
             if( param->required ) {

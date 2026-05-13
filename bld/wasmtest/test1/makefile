@@ -49,6 +49,7 @@ labelbug.dis &
 loader2.dis &
 lods.dis &
 maaak.dis &
+macargws.dis &
 macro.dis &
 macrodef.dis &
 macroesc.dis &
@@ -109,5 +110,6 @@ asm_flags_extcase = -zcm=masm
 asm_flags_extcas2 = -zcm=masm
 asm_flags_extcas3 = -zcm=masm
 asm_flags_trailcm = -zcm=tasm
+asm_flags_macargws = -zcm=masm
 
 !include ../test.mif
