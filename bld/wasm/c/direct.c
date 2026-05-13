@@ -1797,6 +1797,10 @@ bool Include( token_buffer *tokbuf, token_idx i )
     case TC_RAW_TEXT:
     case TC_PATH:
         return( InputQueueFile( tokbuf->tokens[i].string_ptr ) );
+    case TC_OP_ANGLE:
+    case TC_OP_BRACE:
+        /* bracket triple: filename is the inner TC_RAW_TEXT body */
+        return( InputQueueFile( tokbuf->tokens[i + 1].string_ptr ) );
     default:
         AsmError( EXPECTED_FILE_NAME );
         return( RC_ERROR );

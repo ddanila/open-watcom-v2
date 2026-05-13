@@ -240,16 +240,16 @@ bool conditional_error_directive( token_buffer *tokbuf, token_idx i )
         break;
     case T_DOT_ERRB:
     case T_ERRIFB:
-        if( IS_STRING_TOKEN( tokbuf->tokens[i+1].class ) &&
-            check_blank( tokbuf->tokens[i+1].string_ptr ) ) {
-            AsmErr( FORCED_BLANK, tokbuf->tokens[i+1].string_ptr );
+        if( IS_STRING_VALUE( tokbuf->tokens, i + 1 )
+          && check_blank( STRING_VALUE_BODY( tokbuf->tokens, i + 1 ) ) ) {
+            AsmErr( FORCED_BLANK, STRING_VALUE_BODY( tokbuf->tokens, i + 1 ) );
             return( RC_ERROR );
         }
         break;
     case T_DOT_ERRNB:
     case T_ERRIFNB:
-        if( !IS_STRING_TOKEN( tokbuf->tokens[i+1].class ) ||
-            !check_blank( tokbuf->tokens[i+1].string_ptr ) ) {
+        if( !IS_STRING_VALUE( tokbuf->tokens, i + 1 )
+          || !check_blank( STRING_VALUE_BODY( tokbuf->tokens, i + 1 ) ) ) {
             AsmErr( FORCED_NOT_BLANK, tokbuf->tokens[i+1].string_ptr );
             return( RC_ERROR );
         }

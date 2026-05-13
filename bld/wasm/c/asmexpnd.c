@@ -238,7 +238,21 @@ bool ExpandProcString( token_buffer *tokbuf, token_idx index, bool *expanded )
                     continue;   /*yes, skip it */
                 }
             }
-            if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+            /*
+             * Re-serialise a token verbatim for the new line:
+             *   TC_STRING:  restore the original ' or " around the body so
+             *               re-lex sees the same string form.
+             *   TC_RAW_TEXT bareword (no surrounding TC_OP_x): wrap in <>
+             *               to preserve raw-text semantics on re-lex.
+             *   Otherwise (TC_RAW_TEXT inside a triple, TC_OP_x / TC_CL_x,
+             *               or plain tokens): emit string_ptr as-is, since
+             *               bracket tokens already carry their bracket char.
+             */
+            if( tokbuf->tokens[i].class == TC_STRING ) {
+                char d = tokbuf->tokens[i].delim ? tokbuf->tokens[i].delim : '"';
+                p += sprintf( p, "%c%s%c", d, tokbuf->tokens[i].string_ptr, d );
+            } else if( tokbuf->tokens[i].class == TC_RAW_TEXT
+              && ( i == 0 || !IS_OPEN_BRACKET( tokbuf->tokens[i - 1].class ) ) ) {
                 p += sprintf( p, "<%s>", tokbuf->tokens[i].string_ptr );
             } else {
                 p += sprintf( p, "%s", tokbuf->tokens[i].string_ptr );

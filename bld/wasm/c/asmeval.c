@@ -246,14 +246,21 @@ static bool get_operand( expr_list *new, token_buffer *tokbuf, token_idx *start,
         break;
     case TC_STRING:
     case TC_RAW_TEXT:
+    case TC_OP_ANGLE:
+    case TC_OP_BRACE:
         new->empty = false;
         new->type = EXPR_CONST;
-        new->string = tokbuf->tokens[i].string_ptr;
+        new->string = STRING_VALUE_BODY( tokbuf->tokens, i );
         value = 0;
         for( tmp = new->string; (c = *(unsigned char *)tmp) != '\0'; tmp++ ) {
             value = ( value << 8 ) | c;
         }
         new->value = value;
+        if( IS_OPEN_BRACKET( tokbuf->tokens[i].class ) ) {
+            /* triple: caller will advance past the body and closer */
+            i += 2;
+            *start = i;
+        }
         break;
     case TC_REG:
         new->empty = false;
@@ -431,7 +438,9 @@ static bool is_optr( token_buffer *tokbuf, token_idx i )
     case TC_OP_BRACKET:
         return( false );
     default:
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        /* Treat string-like values (TC_STRING, bareword TC_RAW_TEXT, or the
+         * open of a bracket triple) as operands. */
+        if( IS_STRING_VALUE( tokbuf->tokens, i ) ) {
             return( false );
         }
     }
@@ -1746,7 +1755,7 @@ static bool is_expr1( token_buffer *tokbuf, token_idx i )
         return( true );
     case TC_PATH:
     default:
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        if( IS_STRING_VALUE( tokbuf->tokens, i ) ) {
             return( true );
         }
         break;
@@ -1840,7 +1849,7 @@ static bool is_expr2( token_buffer *tokbuf, token_idx i )
         return( true );
     case TC_PATH:
     default:
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        if( IS_STRING_VALUE( tokbuf->tokens, i ) ) {
             return( true );
         }
         break;
@@ -2337,7 +2346,7 @@ static bool is_expr_const( token_idx i )
             return( true );
         }
     default:
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        if( IS_STRING_VALUE( tokbuf->tokens, i ) ) {
             return( true );
         }
         return( false );

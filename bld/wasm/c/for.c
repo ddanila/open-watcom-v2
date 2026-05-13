@@ -107,12 +107,15 @@ bool ForDirective( token_buffer *tokbuf, token_idx i, irp_type type )
             return( RC_ERROR );
         }
         j++;
-        if( !IS_STRING_TOKEN( tokbuf->tokens[j].class ) ) {
+        if( !IS_STRING_VALUE( tokbuf->tokens, j ) ) {
             AsmError( PARM_REQUIRED );
             return( RC_ERROR );
         }
-        parmstring = AsmTmpAlloc( strlen( tokbuf->tokens[j].string_ptr ) + 1 );
-        strcpy( parmstring, tokbuf->tokens[j].string_ptr );
+        {
+            const char *body = STRING_VALUE_BODY( tokbuf->tokens, j );
+            parmstring = AsmTmpAlloc( strlen( body ) + 1 );
+            strcpy( parmstring, body );
+        }
         /*
          * copy parameter name token to correct location (one token up)
          */

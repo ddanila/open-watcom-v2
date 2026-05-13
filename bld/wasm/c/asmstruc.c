@@ -150,7 +150,7 @@ bool InitializeStructure( asm_sym_handle sym, asm_sym_handle struct_symbol, toke
     dir = (dir_node_handle)struct_symbol;
 
     PushLineQueue();
-    if( !IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+    if( !IS_STRING_VALUE( tokbuf->tokens, i ) ) {
         AsmError( SYNTAX_ERROR ); // fixme
         return( RC_ERROR );
     }
@@ -161,7 +161,10 @@ bool InitializeStructure( asm_sym_handle sym, asm_sym_handle struct_symbol, toke
         sym->first_length = struct_symbol->first_length;
     }
 
-    ptr = tokbuf->tokens[i].string_ptr;
+    /* For a bracket triple (the standard MyStruct <...> form) the inner
+     * TC_RAW_TEXT body is the field list to parse; for a single TC_STRING
+     * or TC_RAW_TEXT it's the token itself. */
+    ptr = STRING_VALUE_BODY( tokbuf->tokens, i );
     for( f = dir->e.structinfo->fields.head; f != NULL; f = f->next ) {
         /* put the lines to define the fields of the structure in,
          * using the values specified ( if any ) or the default ones otherwise
@@ -245,7 +248,9 @@ int AddFieldToStruct( asm_sym_handle sym, token_buffer *tokbuf, token_idx loc )
         if( tokbuf->tokens[i].string_ptr != NULL ) {
             count += strlen( tokbuf->tokens[i].string_ptr ) + 1;
         }
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        /* TC_STRING adds 2 chars for its delim wrap. TC_OP_x / TC_CL_x tokens
+         * carry the bracket char in their string_ptr already, so no extra. */
+        if( tokbuf->tokens[i].class == TC_STRING ) {
             count += 2;
         }
     }
@@ -253,43 +258,31 @@ int AddFieldToStruct( asm_sym_handle sym, token_buffer *tokbuf, token_idx loc )
     f->value = MemAllocSafe( count + 1 );
     f->value[0] = '\0';
     for( i = loc + 1; ISVALID_IDX( i ); i++ ) {
-        char open_ch;
-        char close_ch;
+        char delim;
         char buf[2];
 
         if( tokbuf->tokens[i].class == TC_FINAL )
             break;
         /*
-         * For string-like tokens, the original opener/closer is restored
-         * around the body so a later lex of f->value sees the same form.
-         * Undelimited TC_RAW_TEXT (bareword fallback in get_string) is
-         * wrapped in <> so that re-lex stays raw text instead of becoming
-         * a symbol reference -- legacy behavior.
+         * For TC_STRING, restore the original quote so a later lex sees the
+         * same form. TC_OP_x / TC_CL_x bracket tokens carry their char in
+         * string_ptr, so they re-emit naturally as the surrounding `<>` or
+         * `{}`; the inner TC_RAW_TEXT is emitted bare.
          */
-        open_ch = 0;
-        close_ch = 0;
+        delim = 0;
         if( tokbuf->tokens[i].class == TC_STRING ) {
-            open_ch = tokbuf->tokens[i].delim;
-            close_ch = open_ch;
-        } else if( tokbuf->tokens[i].class == TC_RAW_TEXT ) {
-            open_ch = tokbuf->tokens[i].delim;
-            if( open_ch == '{' ) {
-                close_ch = '}';
-            } else {
-                open_ch = '<';
-                close_ch = '>';
-            }
+            delim = tokbuf->tokens[i].delim;
         }
-        if( open_ch ) {
-            buf[0] = open_ch;
+        if( delim ) {
+            buf[0] = delim;
             buf[1] = '\0';
             strcat( f->value, buf );
         }
         if( tokbuf->tokens[i].string_ptr != NULL ) {
             strcat( f->value, tokbuf->tokens[i].string_ptr );
         }
-        if( close_ch ) {
-            buf[0] = close_ch;
+        if( delim ) {
+            buf[0] = delim;
             buf[1] = '\0';
             strcat( f->value, buf );
         }
