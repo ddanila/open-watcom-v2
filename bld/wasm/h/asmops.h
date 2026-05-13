@@ -83,29 +83,35 @@ typedef enum asm_cpu {
  * Token classes for string-like content
  * --------------------------------------
  *
- * The lexer recognises three distinct kinds of "stringy" content. They live
- * in their own classes rather than overloading one class, so consumers can
- * pick the form they actually expect.
+ * The lexer treats "stringy" content as three distinct things:
  *
- *   TC_STRING         '...' or "..." -- a real string literal. The opener
- *                     is recorded on the token's .delim field so the macro
- *                     re-wrap path can round-trip the original quote.
+ *   TC_STRING         '...' or "..." -- a real string literal. Emitted as a
+ *                     single token. The opener is recorded on the token's
+ *                     .delim field so the macro re-wrap path can round-trip
+ *                     the original quote ('m '/'' -> 'DB '/'').
  *
- *   TC_RAW_TEXT       <...>, {...}, or an undelimited bareword fallback.
- *                     Opaque text that consumers either splice verbatim
- *                     (macro arg lists, struct initialisers) or treat as
- *                     a parenthesised raw block. .delim holds the opening
- *                     bracket char (or 0 for the bareword fallback).
+ *   <...> / {...}     opaque bracketed raw text. Emitted as a *triple*:
  *
- *   TC_COMMENT_TEXT   The line tail following the COMMENT directive. Read
- *                     directly by CommentDirective to locate the user-chosen
- *                     terminator; not a "string" in any other sense.
+ *                         TC_OP_ANGLE  TC_RAW_TEXT  TC_CL_ANGLE
+ *                         TC_OP_BRACE  TC_RAW_TEXT  TC_CL_BRACE
  *
- * IS_STRING_TOKEN below is a transitional shim that returns true for both
- * TC_STRING and TC_RAW_TEXT. Use it only where a directive legitimately
- * accepts both (e.g. .ERRB/.ERRNB, struct field defaults, macro args).
- * For sites where one specific form is required by syntax, check the
- * class directly -- see direct.c's Check4Mangler / SegDef / proc_exam.
+ *                     The opener/closer tokens carry the bracket char in
+ *                     their string_ptr; the inner TC_RAW_TEXT carries the
+ *                     body. Directives that accept bracketed forms walk the
+ *                     three tokens explicitly (see Include, IRP, struct
+ *                     initialisers, etc.). This mirrors the form Jiri
+ *                     described in PR #1622 review.
+ *
+ *   TC_RAW_TEXT       outside a bracket triple, only appears as the
+ *                     undelimited-bareword fallback path in get_string.
+ *
+ *   TC_COMMENT_TEXT   line tail following the COMMENT directive. Read
+ *                     directly by CommentDirective; not a "string" in any
+ *                     other sense.
+ *
+ * The IS_OPEN_BRACKET / IS_CLOSE_BRACKET macros below help walk the triple.
+ * IS_STRING_TOKEN is a narrow shim retained only for sites that treat
+ * TC_STRING and a bareword TC_RAW_TEXT the same way (e.g. blank-arg checks).
  */
 
 typedef enum tok_class {
@@ -115,7 +121,7 @@ typedef enum tok_class {
     TC_ID,
     TC_REG,
     TC_STRING,           /* '...' or "..." quoted string literal */
-    TC_RAW_TEXT,         /* opaque body of <...> or {...} (or undelim bareword) */
+    TC_RAW_TEXT,         /* body of a bracket triple, or undelim bareword */
     TC_COMMENT_TEXT,     /* body of the COMMENT directive */
     TC_DIRECTIVE,
     TC_DIRECT_EXPR,
@@ -134,10 +140,12 @@ typedef enum tok_class {
 
     TC_OP_BRACKET,       // '(',
     TC_OP_SQ_BRACKET,    // '[',
-    TC_OP_BRACE,         // '{',
+    TC_OP_BRACE,         // '{',  -- raw-text opener or ENUM body opener
+    TC_OP_ANGLE,         // '<',  -- raw-text opener (paired with TC_CL_ANGLE)
     TC_CL_BRACKET,       // ')',
     TC_CL_SQ_BRACKET,    // ']',
-    TC_CL_BRACE,         // '}'
+    TC_CL_BRACE,         // '}',  -- raw-text closer or ENUM body closer
+    TC_CL_ANGLE,         // '>',  -- raw-text closer (paired with TC_OP_ANGLE)
     TC_COMMA,            // ',',
     TC_COLON,            // ':',
     TC_COLON_EQU,        // ':=',
@@ -162,5 +170,22 @@ typedef struct asm_tok {
 } asm_tok;
 
 #define IS_STRING_TOKEN( cls )      ((cls) == TC_STRING || (cls) == TC_RAW_TEXT)
+#define IS_OPEN_BRACKET( cls )      ((cls) == TC_OP_ANGLE || (cls) == TC_OP_BRACE)
+#define IS_CLOSE_BRACKET( cls )     ((cls) == TC_CL_ANGLE || (cls) == TC_CL_BRACE)
+
+/* True if tokens[i] is the start of a logical "string-like value" --
+ * either a TC_STRING / standalone TC_RAW_TEXT (size 1) or a bracket triple
+ * (size 3, body at i+1). */
+#define IS_STRING_VALUE( tokens, i ) \
+    ( IS_STRING_TOKEN( (tokens)[i].class ) || IS_OPEN_BRACKET( (tokens)[i].class ) )
+
+/* Body string of the value at tokens[i]; assumes IS_STRING_VALUE is true. */
+#define STRING_VALUE_BODY( tokens, i ) \
+    ( IS_OPEN_BRACKET( (tokens)[i].class ) ? (tokens)[(i) + 1].string_ptr : (tokens)[i].string_ptr )
+
+/* How many tokens the logical value at tokens[i] spans: 3 for a bracket
+ * triple, 1 otherwise. */
+#define STRING_VALUE_LEN( tokens, i ) \
+    ( IS_OPEN_BRACKET( (tokens)[i].class ) ? 3 : 1 )
 
 #endif
