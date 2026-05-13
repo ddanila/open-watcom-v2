@@ -1794,7 +1794,7 @@ bool Include( token_buffer *tokbuf, token_idx i )
     switch( tokbuf->tokens[i].class ) {
     case TC_ID:
     case TC_STRING:
-    case TC_RAW_TEXT:
+    case TC_BAREWORD:
     case TC_PATH:
         return( InputQueueFile( tokbuf->tokens[i].string_ptr ) );
     case TC_OP_ANGLE:

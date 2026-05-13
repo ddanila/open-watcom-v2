@@ -242,7 +242,10 @@ static bool get_string( asm_tok *tok, const char **input, char **output, int *ex
                                     TC_OP_BRACE, TC_CL_BRACE, extra_tokens ) );
 
     default:
-        tok->class = TC_RAW_TEXT;
+        /* Undelimited fallback. TC_BAREWORD keeps this distinct from a
+         * triple body (which is always TC_RAW_TEXT) so the structural
+         * invariant "TC_RAW_TEXT only appears inside <>/{}" holds. */
+        tok->class = TC_BAREWORD;
         tok->string_ptr = *output;
         tok->delim = 0;
         for( count = 0; **input != '\0' && !isspace( **input ) && **input != ','; count++ ) {

@@ -242,8 +242,8 @@ bool ExpandProcString( token_buffer *tokbuf, token_idx index, bool *expanded )
              * Re-serialise a token verbatim for the new line:
              *   TC_STRING:  restore the original ' or " around the body so
              *               re-lex sees the same string form.
-             *   TC_RAW_TEXT bareword (no surrounding TC_OP_x): wrap in <>
-             *               to preserve raw-text semantics on re-lex.
+             *   TC_BAREWORD: wrap in <> so re-lex preserves raw-text
+             *               semantics rather than looking it up as a symbol.
              *   Otherwise (TC_RAW_TEXT inside a triple, TC_OP_x / TC_CL_x,
              *               or plain tokens): emit string_ptr as-is, since
              *               bracket tokens already carry their bracket char.
@@ -251,8 +251,7 @@ bool ExpandProcString( token_buffer *tokbuf, token_idx index, bool *expanded )
             if( tokbuf->tokens[i].class == TC_STRING ) {
                 char d = tokbuf->tokens[i].delim ? tokbuf->tokens[i].delim : '"';
                 p += sprintf( p, "%c%s%c", d, tokbuf->tokens[i].string_ptr, d );
-            } else if( tokbuf->tokens[i].class == TC_RAW_TEXT
-              && ( i == 0 || !IS_OPEN_BRACKET( tokbuf->tokens[i - 1].class ) ) ) {
+            } else if( tokbuf->tokens[i].class == TC_BAREWORD ) {
                 p += sprintf( p, "<%s>", tokbuf->tokens[i].string_ptr );
             } else {
                 p += sprintf( p, "%s", tokbuf->tokens[i].string_ptr );
@@ -439,7 +438,7 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
     for( i = 0; i < count; i++ ) {
         switch( tokbuf->tokens[start + i].class ) {
         case TC_STRING:
-        case TC_RAW_TEXT:
+        case TC_BAREWORD:
             if( count != 1 && tokbuf->tokens[start + i].u.value == 0 ) {
                 i--;
                 count--;

@@ -320,7 +320,7 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             }
             break;
         case TC_STRING:
-        case TC_RAW_TEXT:
+        case TC_BAREWORD:
         case TC_OP_ANGLE:
         case TC_OP_BRACE:
           {

@@ -245,7 +245,7 @@ static bool get_operand( expr_list *new, token_buffer *tokbuf, token_idx *start,
         new->value = tokbuf->tokens[i].u.value;
         break;
     case TC_STRING:
-    case TC_RAW_TEXT:
+    case TC_BAREWORD:
     case TC_OP_ANGLE:
     case TC_OP_BRACE:
         new->empty = false;
