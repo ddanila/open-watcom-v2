@@ -420,6 +420,15 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
             return( RC_ERROR );
 
         for( counta = 0, i = start; tokbuf->tokens[i].class != TC_FINAL; i++ ) {
+            /* Treat an empty bracket triple `<>` / `{}` like an empty
+             * TC_STRING/TC_BAREWORD: don't count it. (3 tokens contribute 0
+             * to counta; the new[] loop below skips them in lockstep.) */
+            if( IS_OPEN_BRACKET( tokbuf->tokens[i].class )
+              && tokbuf->tokens[i + 1].class == TC_RAW_TEXT
+              && tokbuf->tokens[i + 1].u.value == 0 ) {
+                i += 2;     /* +1 from loop, total +3 */
+                continue;
+            }
             if( !IS_STRING_TOKEN( tokbuf->tokens[i].class ) || ( tokbuf->tokens[i].u.value != 0 ) ) {
                 counta++;
             }
@@ -436,6 +445,18 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
         can_be_redefine = ( counta > 1 );
     }
     for( i = 0; i < count; i++ ) {
+        /* Skip an empty <>/{} triple in a multi-token EQU, mirroring the
+         * single-token skip below. A sole empty triple (count == 3) is
+         * preserved as the constant's value. */
+        if( count != 3
+          && IS_OPEN_BRACKET( tokbuf->tokens[start + i].class )
+          && tokbuf->tokens[start + i + 1].class == TC_RAW_TEXT
+          && tokbuf->tokens[start + i + 1].u.value == 0 ) {
+            i--;
+            count -= 3;
+            start += 3;
+            continue;
+        }
         switch( tokbuf->tokens[start + i].class ) {
         case TC_STRING:
         case TC_BAREWORD:
