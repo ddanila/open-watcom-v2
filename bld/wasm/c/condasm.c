@@ -183,6 +183,23 @@ static bool check_dif( bool sensitive, char *string, char *string2 )
     }
 }
 
+static void dif_args( token_buffer *tokbuf, token_idx i, char **a1, char **a2 )
+/******************************************************************************
+ * Extract the two text args of an IFDIF/IFIDN-style directive at tokens[i].
+ * Each arg is either a single TC_STRING/TC_BAREWORD-style token (length 1) or
+ * a TC_OP_x TC_RAW_TEXT TC_CL_x triple (length 3); the comma sits between
+ * them. Walks the structure rather than relying on fixed offsets that only
+ * hold for the single-token form.
+ */
+{
+    token_idx j = i + 1;
+    *a1 = STRING_VALUE_BODY( tokbuf->tokens, j );
+    j += STRING_VALUE_LEN( tokbuf->tokens, j );
+    if( tokbuf->tokens[j].class == TC_COMMA )
+        j++;
+    *a2 = STRING_VALUE_BODY( tokbuf->tokens, j );
+}
+
 bool conditional_error_directive( token_buffer *tokbuf, token_idx i )
 /*******************************************************************/
 {
@@ -255,33 +272,45 @@ bool conditional_error_directive( token_buffer *tokbuf, token_idx i )
         }
         break;
     case T_DOT_ERRDIF:
-    case T_ERRIFDIF:
-        if( check_dif( true, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr ) ) {
-            AsmErr( FORCED_DIF, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr );
+    case T_ERRIFDIF: {
+        char *a1; char *a2;
+        dif_args( tokbuf, i, &a1, &a2 );
+        if( check_dif( true, a1, a2 ) ) {
+            AsmErr( FORCED_DIF, a1, a2 );
             return( RC_ERROR );
         }
         break;
+    }
     case T_DOT_ERRDIFI:
-    case T_ERRIFDIFI:
-        if( check_dif( false, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr ) ) {
-            AsmErr( FORCED_DIF, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr );
+    case T_ERRIFDIFI: {
+        char *a1; char *a2;
+        dif_args( tokbuf, i, &a1, &a2 );
+        if( check_dif( false, a1, a2 ) ) {
+            AsmErr( FORCED_DIF, a1, a2 );
             return( RC_ERROR );
         }
         break;
+    }
     case T_DOT_ERRIDN:
-    case T_ERRIFIDN:
-        if( !check_dif( true, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr ) ) {
-            AsmErr( FORCED_IDN, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr );
+    case T_ERRIFIDN: {
+        char *a1; char *a2;
+        dif_args( tokbuf, i, &a1, &a2 );
+        if( !check_dif( true, a1, a2 ) ) {
+            AsmErr( FORCED_IDN, a1, a2 );
             return( RC_ERROR );
         }
         break;
+    }
     case T_DOT_ERRIDNI:
-    case T_ERRIFIDNI:
-        if( !check_dif( false, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr ) ) {
-            AsmErr( FORCED_IDN, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr );
+    case T_ERRIFIDNI: {
+        char *a1; char *a2;
+        dif_args( tokbuf, i, &a1, &a2 );
+        if( !check_dif( false, a1, a2 ) ) {
+            AsmErr( FORCED_IDN, a1, a2 );
             return( RC_ERROR );
         }
         break;
+    }
     }
     return( RC_OK );
 }
@@ -338,25 +367,33 @@ static if_state get_cond_state( token_buffer *tokbuf, token_idx i )
                     ? ACTIVE : LOOKING_FOR_TRUE_COND;
         break;
     case T_IFDIF:
-    case T_ELSEIFDIF:
-        cond_state = ( check_dif( true, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr ) )
-                    ? ACTIVE : LOOKING_FOR_TRUE_COND;
+    case T_ELSEIFDIF: {
+        char *a1; char *a2;
+        dif_args( tokbuf, i, &a1, &a2 );
+        cond_state = check_dif( true, a1, a2 ) ? ACTIVE : LOOKING_FOR_TRUE_COND;
         break;
+    }
     case T_IFDIFI:
-    case T_ELSEIFDIFI:
-        cond_state = ( check_dif( false, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr ) )
-                    ? ACTIVE : LOOKING_FOR_TRUE_COND;
+    case T_ELSEIFDIFI: {
+        char *a1; char *a2;
+        dif_args( tokbuf, i, &a1, &a2 );
+        cond_state = check_dif( false, a1, a2 ) ? ACTIVE : LOOKING_FOR_TRUE_COND;
         break;
+    }
     case T_IFIDN:
-    case T_ELSEIFIDN:
-        cond_state = ( !check_dif( true, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr ) )
-                    ? ACTIVE : LOOKING_FOR_TRUE_COND;
+    case T_ELSEIFIDN: {
+        char *a1; char *a2;
+        dif_args( tokbuf, i, &a1, &a2 );
+        cond_state = !check_dif( true, a1, a2 ) ? ACTIVE : LOOKING_FOR_TRUE_COND;
         break;
+    }
     case T_IFIDNI:
-    case T_ELSEIFIDNI:
-        cond_state = ( !check_dif( false, tokbuf->tokens[i+1].string_ptr, tokbuf->tokens[i+3].string_ptr ) )
-                    ? ACTIVE : LOOKING_FOR_TRUE_COND;
+    case T_ELSEIFIDNI: {
+        char *a1; char *a2;
+        dif_args( tokbuf, i, &a1, &a2 );
+        cond_state = !check_dif( false, a1, a2 ) ? ACTIVE : LOOKING_FOR_TRUE_COND;
         break;
+    }
     case T_IFNB:
     case T_ELSEIFNB:
         cond_state = ( !check_blank( tokbuf->tokens[i+1].string_ptr ) )
