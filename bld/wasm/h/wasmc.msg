@@ -192,6 +192,9 @@ pick( ASM_CODE_TOO_LONG,
 pick( BRACKETS_NOT_BALANCED,
                                 "Brackets are not balanced" ,
                                 "左右の括弧の数が合いません" )
+pick( UNTERMINATED_BRACKETED_TEXT,
+                                "Unterminated bracketed text -- missing closing '>' or '}'" ,
+                                "左右の括弧の数が合いません" )
 pick( OPERATOR_EXPECTED,
                                 "Operator is expected" ,
                                 "演算子がなければなりません" )

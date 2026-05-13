@@ -171,7 +171,14 @@ static bool get_bracket_triple( asm_tok *tok, const char **input, char **output,
             }
         } else if( **input == '\0' || **input == '\n' ) {
             *(*output)++ = '\0';
-            AsmError( SYNTAX_ERROR );
+            body->u.value = count;
+            /* Set *extra_tokens to the count we've written so far so the
+             * AsmScan caller's SetFinalToken doesn't overwrite the partial
+             * opener+body we just emitted. The body is well-formed (just
+             * truncated); flagging that to the user is more useful than the
+             * old generic SYNTAX_ERROR. */
+            *extra_tokens = 1;
+            AsmError( UNTERMINATED_BRACKETED_TEXT );
             return( RC_ERROR );
         }
         *(*output)++ = *(*input)++;
@@ -836,7 +843,8 @@ bool AsmScan( token_buffer *tokbuf, const char *string )
 #endif
         } else if( isdigit( c ) ) {
             if( get_number( tok + i, &ptr, &output_ptr, base10, &extra_tokens ) ) {
-                SetFinalToken( tokbuf, i + 1 );
+                /* preserve any partial bracket-triple tokens already written */
+                SetFinalToken( tokbuf, i + 1 + extra_tokens );
                 return( RC_ERROR );
             }
         } else if( c == '`' ) {
@@ -846,7 +854,8 @@ bool AsmScan( token_buffer *tokbuf, const char *string )
             }
         } else {
             if( get_special_symbol( tok + i, &ptr, &output_ptr, &extra_tokens ) ) {
-                SetFinalToken( tokbuf, i + 1 );
+                /* preserve any partial bracket-triple tokens already written */
+                SetFinalToken( tokbuf, i + 1 + extra_tokens );
                 return( RC_ERROR );
             }
         }
