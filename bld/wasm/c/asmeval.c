@@ -245,18 +245,22 @@ static bool get_operand( expr_list *new, token_buffer *tokbuf, token_idx *start,
         new->value = tokbuf->tokens[i].u.value;
         break;
     case TC_STRING:
-    case TC_STRING_SQUOTE:
-    case TC_STRING_DQUOTE:
-    case TC_STRING_ANGLE:
-    case TC_STRING_BRACE:
+    case TC_BAREWORD:
+    case TC_OP_ANGLE:
+    case TC_OP_BRACE:
         new->empty = false;
         new->type = EXPR_CONST;
-        new->string = tokbuf->tokens[i].string_ptr;
+        new->string = STRING_VALUE_BODY( tokbuf->tokens, i );
         value = 0;
         for( tmp = new->string; (c = *(unsigned char *)tmp) != '\0'; tmp++ ) {
             value = ( value << 8 ) | c;
         }
         new->value = value;
+        if( IS_OPEN_BRACKET( tokbuf->tokens[i].class ) ) {
+            /* triple: caller will advance past the body and closer */
+            i += 2;
+            *start = i;
+        }
         break;
     case TC_REG:
         new->empty = false;
@@ -434,7 +438,9 @@ static bool is_optr( token_buffer *tokbuf, token_idx i )
     case TC_OP_BRACKET:
         return( false );
     default:
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        /* Treat string-like values (TC_STRING, bareword TC_RAW_TEXT, or the
+         * open of a bracket triple) as operands. */
+        if( IS_STRING_VALUE( tokbuf->tokens, i ) ) {
             return( false );
         }
     }
@@ -1749,7 +1755,7 @@ static bool is_expr1( token_buffer *tokbuf, token_idx i )
         return( true );
     case TC_PATH:
     default:
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        if( IS_STRING_VALUE( tokbuf->tokens, i ) ) {
             return( true );
         }
         break;
@@ -1843,7 +1849,7 @@ static bool is_expr2( token_buffer *tokbuf, token_idx i )
         return( true );
     case TC_PATH:
     default:
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        if( IS_STRING_VALUE( tokbuf->tokens, i ) ) {
             return( true );
         }
         break;
@@ -1921,9 +1927,13 @@ static token_idx fix( expr_list *res, token_buffer *tokbuf, token_idx start, tok
         if( res->string == NULL ) {
             tokbuf->tokens[ start ].class = TC_NUM;
             tokbuf->tokens[ start ].u.value = res->value;
+            tokbuf->tokens[ start ].delim = 0;
             tokbuf->tokens[ start++ ].string_ptr = "";
         } else {
+            /* synthetic string from string-valued expression; no original
+             * opener exists, so delim=0 signals "no quote to re-wrap with" */
             tokbuf->tokens[ start ].class = TC_STRING;
+            tokbuf->tokens[ start ].delim = 0;
             tokbuf->tokens[ start++ ].string_ptr = res->string;
         }
 
@@ -2336,7 +2346,7 @@ static bool is_expr_const( token_idx i )
             return( true );
         }
     default:
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        if( IS_STRING_VALUE( tokbuf->tokens, i ) ) {
             return( true );
         }
         return( false );

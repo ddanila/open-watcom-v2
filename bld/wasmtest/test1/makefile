@@ -40,8 +40,10 @@ g.dis &
 getenv.dis &
 hello.dis &
 ifdefmac.dis &
+ifdif.dis &
 ifs.dis &
 ins.dis &
+irp.dis &
 jmpfword.dis &
 jmpsize.dis &
 jmptst.dis &

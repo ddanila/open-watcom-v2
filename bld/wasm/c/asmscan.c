@@ -65,9 +65,9 @@ static bool get_float( asm_tok *tok, const char **input, char **output )
     const char      *ptr;
     size_t          len;
     int             c;
-    unsigned char   extra;
+    unsigned char   suffix_len;
 
-    extra = 0;
+    suffix_len = 0;
     got_e = false;
     got_decimal = false;
     for( ptr = *input; (c = *ptr) != '\0'; ptr++ ) {
@@ -83,7 +83,7 @@ static bool get_float( asm_tok *tok, const char **input, char **output )
         }
         c = tolower( c );
         if( c == 'r' ) {
-            extra = 1;
+            suffix_len = 1;
             break;
         }
         if( c != 'e' || got_e )
@@ -99,11 +99,11 @@ static bool get_float( asm_tok *tok, const char **input, char **output )
     tok->class = TC_FLOAT;
     /* copy the string, fix input & output pointers */
     tok->string_ptr = *output;
-    len = ptr - *input + extra;
+    len = ptr - *input + suffix_len;
     memcpy( *output, *input, len );
     *output += len;
     *(*output)++ = '\0';
-    *input = ptr + extra;
+    *input = ptr + suffix_len;
 
     tok->u.float_value = (float)atof( tok->string_ptr );
     return( RC_OK );
@@ -126,63 +126,43 @@ static void array_mul_add( unsigned char *buf, unsigned base, const char *dig, u
     }
 }
 
-static bool get_string( asm_tok *tok, const char **input, char **output )
-/***********************************************************************/
+static bool get_bracket_triple( asm_tok *tok, const char **input, char **output,
+                                char symbol_o, char symbol_c,
+                                tok_class open_class, tok_class close_class,
+                                int *extra_tokens )
+/****************************************************************************
+ * Emit a three-token bracket triple at tok[0..2]:
+ *     tok[0]: open_class,   string_ptr -> "<" or "{"
+ *     tok[1]: TC_RAW_TEXT,  string_ptr -> body (nested same-form brackets
+ *                                          preserved verbatim, via level)
+ *     tok[2]: close_class,  string_ptr -> ">" or "}"
+ * On return *extra_tokens = 2 so the AsmScan caller knows to advance its
+ * token index past the body and closer in addition to its usual i++.
+ */
 {
-    char    symbol_o;
-    char    symbol_c;
-    int     count;
-    int     level;
+    int         count;
+    int         level;
+    asm_tok     *body;
+    asm_tok     *close;
 
+    tok->class = open_class;
     tok->string_ptr = *output;
+    tok->delim = 0;
+    *(*output)++ = symbol_o;
+    *(*output)++ = '\0';
+    (*input)++;     /* skip the opener char */
 
-    symbol_o = **input;
+    body = tok + 1;
+    body->class = TC_RAW_TEXT;
+    body->string_ptr = *output;
+    body->delim = 0;
 
-    switch( symbol_o ) {
-    case '"':
-        tok->class = TC_STRING_DQUOTE;
-        symbol_c = 0;
-        break;  // end of string marker is the same
-    case '\'':
-        tok->class = TC_STRING_SQUOTE;
-        symbol_c = 0;
-        break;  // end of string marker is the same
-    case '<':
-        tok->class = TC_STRING_ANGLE;
-        symbol_c = '>';
-        break;
-    case '{':
-        tok->class = TC_STRING_BRACE;
-        symbol_c = '}';
-        break;
-    default:
-        /* this is an undelimited string,
-         * so just copy it until we hit something that looks like the end
-         */
-        tok->class = TC_STRING;
-        for( count = 0; **input != '\0' && !isspace( **input ) && **input != ','; count++ ) {
-            *(*output)++ = *(*input)++; /* keep the 2nd one */
-        }
-        *(*output)++ = '\0';
-        tok->u.value = count;
-        return( RC_OK );
-    }
-    (*input)++;
     count = 0;
     level = 0;
-    for( count = 0; count < MAX_TOK_LEN; count++ ) {
+    while( count < MAX_TOK_LEN ) {
         if( **input == symbol_o ) {
-            if( symbol_c ) {
-                level++;
-            } else if( *( *input + 1 ) == symbol_o ) {
-                /* if we see "" in a " delimited string,
-                 * treat it as a literal " */
-                (*input)++; /* skip the 1st one and keep the 2nd one */
-            } else {
-                (*input)++; /* skip the closing delimiter */
-                break;
-            }
-        } else if( symbol_c && **input == symbol_c ) {
+            level++;
+        } else if( **input == symbol_c ) {
             if( level ) {
                 level--;
             } else {
@@ -191,23 +171,109 @@ static bool get_string( asm_tok *tok, const char **input, char **output )
             }
         } else if( **input == '\0' || **input == '\n' ) {
             *(*output)++ = '\0';
-            AsmError( SYNTAX_ERROR );
+            body->u.value = count;
+            /* Set *extra_tokens to the count we've written so far so the
+             * AsmScan caller's SetFinalToken doesn't overwrite the partial
+             * opener+body we just emitted. The body is well-formed (just
+             * truncated); flagging that to the user is more useful than the
+             * old generic SYNTAX_ERROR. */
+            *extra_tokens = 1;
+            AsmError( UNTERMINATED_BRACKETED_TEXT );
             return( RC_ERROR );
         }
         *(*output)++ = *(*input)++;
+        count++;
     }
     *(*output)++ = '\0';
-    tok->u.value = count;
+    body->u.value = count;
+
+    close = tok + 2;
+    close->class = close_class;
+    close->string_ptr = *output;
+    close->delim = 0;
+    *(*output)++ = symbol_c;
+    *(*output)++ = '\0';
+
+    *extra_tokens = 2;
     return( RC_OK );
 }
 
-static bool get_number( asm_tok *tok, const char **input, char **output, bool base10 )
-/************************************************************************************/
+static bool get_string( asm_tok *tok, const char **input, char **output, int *extra_tokens )
+/******************************************************************************************
+ * On '/'":  emit one TC_STRING; .delim records the opener (' or ").
+ * On </{ :  emit a bracket triple via get_bracket_triple (sets *extra_tokens=2).
+ * Otherwise: emit one TC_RAW_TEXT for the undelimited bareword fallback
+ *            (reachable only when get_id, get_number etc. give up and
+ *            decide the run of chars is opaque text).
+ */
+{
+    char    symbol_o;
+    int     count;
+
+    *extra_tokens = 0;
+    symbol_o = **input;
+
+    switch( symbol_o ) {
+    case '"':
+    case '\'':
+        tok->class = TC_STRING;
+        tok->string_ptr = *output;
+        tok->delim = symbol_o;
+        (*input)++;     /* skip the opener */
+        for( count = 0; count < MAX_TOK_LEN; count++ ) {
+            if( **input == symbol_o ) {
+                if( *( *input + 1 ) == symbol_o ) {
+                    /* doubled delim -- literal */
+                    (*input)++; /* skip the 1st, keep the 2nd */
+                } else {
+                    (*input)++; /* skip the closing delimiter */
+                    break;
+                }
+            } else if( **input == '\0' || **input == '\n' ) {
+                *(*output)++ = '\0';
+                AsmError( SYNTAX_ERROR );
+                return( RC_ERROR );
+            }
+            *(*output)++ = *(*input)++;
+        }
+        *(*output)++ = '\0';
+        tok->u.value = count;
+        return( RC_OK );
+
+    case '<':
+        return( get_bracket_triple( tok, input, output, '<', '>',
+                                    TC_OP_ANGLE, TC_CL_ANGLE, extra_tokens ) );
+
+    case '{':
+        return( get_bracket_triple( tok, input, output, '{', '}',
+                                    TC_OP_BRACE, TC_CL_BRACE, extra_tokens ) );
+
+    default:
+        /* Undelimited fallback. TC_BAREWORD keeps this distinct from a
+         * triple body (which is always TC_RAW_TEXT) so the structural
+         * invariant "TC_RAW_TEXT only appears inside <>/{}" holds. */
+        tok->class = TC_BAREWORD;
+        tok->string_ptr = *output;
+        tok->delim = 0;
+        for( count = 0; **input != '\0' && !isspace( **input ) && **input != ','; count++ ) {
+            *(*output)++ = *(*input)++;
+        }
+        *(*output)++ = '\0';
+        tok->u.value = count;
+        return( RC_OK );
+    }
+}
+
+static bool get_number( asm_tok *tok, const char **input, char **output, bool base10, int *extra_tokens )
+/******************************************************************************************************
+ * extra_tokens is an out-param used only when get_number falls through to
+ * get_string (no leading digits and not a 0-prefixed literal). See get_string.
+ */
 {
     const char          *ptr;
     const char          *dig_start;
     bool                first_char_0;
-    unsigned char       extra;
+    unsigned char       suffix_len;
     size_t              len;
     unsigned            base = 0;
     unsigned            digits_seen;
@@ -221,7 +287,7 @@ static bool get_number( asm_tok *tok, const char **input, char **output, bool ba
 
     digits_seen = 0;
     first_char_0 = false;
-    extra = 0;
+    suffix_len = 0;
     ptr = *input;
     if( *(unsigned char *)ptr == '0' ) {
         ++ptr;
@@ -256,7 +322,7 @@ static bool get_number( asm_tok *tok, const char **input, char **output, bool ba
                         c2 = ((unsigned char *)ptr)[1];
                         if( !isxdigit( c2 ) && tolower( c2 ) != 'h' ) {
                             base = 2;
-                            extra = 1;
+                            suffix_len = 1;
                             break;
                         }
                     }
@@ -266,7 +332,7 @@ static bool get_number( asm_tok *tok, const char **input, char **output, bool ba
                         if( !isxdigit( c2 ) && tolower( c2 ) != 'h' ) {
                             if( !isalnum( c2 ) && c2 != '_' ) {
                                 base = 10;
-                                extra = 1;
+                                suffix_len = 1;
                             }
                             break;
                         }
@@ -277,13 +343,13 @@ static bool get_number( asm_tok *tok, const char **input, char **output, bool ba
             continue;
         } else if( c == 'h' ) {
             base = 16;
-            extra = 1;
+            suffix_len = 1;
         } else if( c == 't' ) {
             base = 10;
-            extra = 1;
+            suffix_len = 1;
         } else if( c == 'o' || c == 'q' ) {
             base = 8;
-            extra = 1;
+            suffix_len = 1;
         } else if( c == 'r' ) {
             /* note that a float MUST contain a dot
              * OR be ended with an "r"
@@ -291,13 +357,13 @@ static bool get_number( asm_tok *tok, const char **input, char **output, bool ba
             return( get_float( tok, input, output ) );
         } else if( c == 'y' ) {
             base = 2;
-            extra = 1;
+            suffix_len = 1;
         }
         break;
     }
     if( digits_seen == 0 ) {
         if( !first_char_0 ) {
-            return( get_string( tok, input, output ) );
+            return( get_string( tok, input, output, extra_tokens ) );
         }
         digits_seen |= 1;
         first_char_0 = false;
@@ -340,11 +406,11 @@ static bool get_number( asm_tok *tok, const char **input, char **output, bool ba
     }
     /* copy the string, fix input & output pointers */
     tok->string_ptr = *output;
-    len = ptr - *input + extra;
+    len = ptr - *input + suffix_len;
     memcpy( *output, *input, len );
     *output += len;
     *(*output)++ = '\0';
-    *input = ptr + extra;
+    *input = ptr + suffix_len;
     memset( tok->u.bytes, 0, sizeof( tok->u.bytes ) );
     while( dig_start < ptr ) {
         array_mul_add( tok->u.bytes, base, dig_start, sizeof( tok->u.bytes ) );
@@ -553,19 +619,24 @@ static bool get_comment( asm_tok *tok, const char **input, char **output )
     (*output) += len;
     *(*output)++ = '\0';
     *input += len;
-    tok->class = TC_STRING;
+    tok->class = TC_COMMENT_TEXT;
+    tok->delim = 0;
     tok->u.value = 0;
     return( RC_OK );
 }
 
 #endif
 
-static bool get_special_symbol( asm_tok *tok, const char **input, char **output )
-/*******************************************************************************/
+static bool get_special_symbol( asm_tok *tok, const char **input, char **output, int *extra_tokens )
+/***************************************************************************************************
+ * extra_tokens is forwarded from/to get_string; non-zero only when this
+ * function dispatches to get_string and the lexed form is a bracket triple.
+ */
 {
     char        symbol;
     tok_class   cls;
 
+    *extra_tokens = 0;
     tok->string_ptr = *output;
 
     symbol = **input;
@@ -640,7 +711,7 @@ static bool get_special_symbol( asm_tok *tok, const char **input, char **output 
         /* anything we don't recognise we will consider a string,
          * delimited by space characters, commas, newlines or nulls
          */
-        return( get_string( tok, input, output ) );
+        return( get_string( tok, input, output, extra_tokens ) );
     }
     tok->class = cls;
     *(*output)++ = *(*input)++;
@@ -649,11 +720,16 @@ static bool get_special_symbol( asm_tok *tok, const char **input, char **output 
 }
 
 #if defined( _STANDALONE_ )
-static bool get_inc_path( asm_tok *tok, const char **input, char **output )
-/*************************************************************************/
+static bool get_inc_path( asm_tok *tok, const char **input, char **output, int *extra_tokens )
+/********************************************************************************************
+ * For quoted (' or ") paths, emits a single TC_STRING. For bracketed (< or
+ * {) paths, emits a bracket triple via get_string; the Include directive
+ * walks the triple to find the body. For barewords, emits a single TC_PATH.
+ */
 {
     char symbol;
 
+    *extra_tokens = 0;
     tok->class = TC_PATH;
     tok->u.value = 0;
     tok->string_ptr = *output;
@@ -668,8 +744,7 @@ static bool get_inc_path( asm_tok *tok, const char **input, char **output )
     case '"' :
     case '<' :
     case '{' :
-        /* string delimiters -- just get the path as a string */
-        return( get_string( tok, input, output ) );
+        return( get_string( tok, input, output, extra_tokens ) );
     default:
         /* otherwise, just copy whatever is here */
         while( **input && !isspace( **input )  ) {
@@ -687,6 +762,7 @@ void SetFinalToken( token_buffer *tokbuf, token_idx count )
         count = MAX_TOKEN_COUNT;
     tokbuf->tokens[count].class = TC_FINAL;
     tokbuf->tokens[count].string_ptr = NULL;
+    tokbuf->tokens[count].delim = 0;
     tokbuf->count = count;
 }
 
@@ -728,7 +804,9 @@ bool AsmScan( token_buffer *tokbuf, const char *string )
     tok = tokbuf->tokens;
     i = 0;
     while( i < MAX_TOKEN_COUNT ) {
+        int extra_tokens = 0;   /* non-zero if a bracket triple was emitted */
         tok[i].string_ptr = output_ptr;
+        tok[i].delim = 0;
         while( isspace( *ptr ) ) {
             ptr++;
         }
@@ -757,15 +835,16 @@ bool AsmScan( token_buffer *tokbuf, const char *string )
                     i++;
                     if( i >= MAX_TOKEN_COUNT )
                         break;
-                    get_inc_path( tok + i, &ptr, &output_ptr );
+                    get_inc_path( tok + i, &ptr, &output_ptr, &extra_tokens );
                 } else if( tok[i].u.token == T_DOT_RADIX ) {
                     base10 = true;
                 }
             }
 #endif
         } else if( isdigit( c ) ) {
-            if( get_number( tok + i, &ptr, &output_ptr, base10 ) ) {
-                SetFinalToken( tokbuf, i + 1 );
+            if( get_number( tok + i, &ptr, &output_ptr, base10, &extra_tokens ) ) {
+                /* preserve any partial bracket-triple tokens already written */
+                SetFinalToken( tokbuf, i + 1 + extra_tokens );
                 return( RC_ERROR );
             }
         } else if( c == '`' ) {
@@ -774,11 +853,13 @@ bool AsmScan( token_buffer *tokbuf, const char *string )
                 return( RC_ERROR );
             }
         } else {
-            if( get_special_symbol( tok + i, &ptr, &output_ptr ) ) {
-                SetFinalToken( tokbuf, i + 1 );
+            if( get_special_symbol( tok + i, &ptr, &output_ptr, &extra_tokens ) ) {
+                /* preserve any partial bracket-triple tokens already written */
+                SetFinalToken( tokbuf, i + 1 + extra_tokens );
                 return( RC_ERROR );
             }
         }
+        i += extra_tokens;
         i++;
     }
     AsmError( TOO_MANY_TOKENS );

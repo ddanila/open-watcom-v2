@@ -320,23 +320,30 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             }
             break;
         case TC_STRING:
-        case TC_STRING_SQUOTE:
-        case TC_STRING_DQUOTE:
-        case TC_STRING_ANGLE:
-        case TC_STRING_BRACE:
+        case TC_BAREWORD:
+        case TC_OP_ANGLE:
+        case TC_OP_BRACE:
+          {
+            /* For a bracket triple, byte data comes from the inner TC_RAW_TEXT;
+             * for TC_STRING / standalone TC_RAW_TEXT (undelim bareword) it comes
+             * from the token itself. */
+            token_idx body_pos;
+            body_pos = IS_OPEN_BRACKET( tokbuf->tokens[cur_pos].class ) ? cur_pos + 1 : cur_pos;
 #if defined( _STANDALONE_ )
             if( struct_sym != NULL ) {
                 InitializeStructure( sym, struct_sym, tokbuf, cur_pos );
+                if( IS_OPEN_BRACKET( tokbuf->tokens[cur_pos].class ) )
+                    cur_pos += 2;
                 break;
             }
 #endif
             if( no_of_bytes != 1 ) {
-                if( (unsigned)tokbuf->tokens[cur_pos].u.value > no_of_bytes ) {
+                if( (unsigned)tokbuf->tokens[body_pos].u.value > no_of_bytes ) {
                     AsmError( INITIALIZER_OUT_OF_RANGE );
                     return( INVALID_IDX );
                 }
             }
-            char_ptr = tokbuf->tokens[cur_pos].string_ptr;
+            char_ptr = tokbuf->tokens[body_pos].string_ptr;
 
             /* anything bigger than a byte must be stored in little-endian
             * format -- LSB first */
@@ -344,7 +351,7 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
 #if defined( _STANDALONE_ )
             if( no_of_bytes == 1
               && struct_field ) {
-                no_of_bytes = tokbuf->tokens[cur_pos].u.value;
+                no_of_bytes = tokbuf->tokens[body_pos].u.value;
             }
             if( sym != NULL
               && Parse_Pass == PASS_1 ) {
@@ -352,10 +359,10 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             }
             if( !struct_field ) {
 #endif
-                for( count = tokbuf->tokens[cur_pos].u.value; count > 0 ; --count ) {
+                for( count = tokbuf->tokens[body_pos].u.value; count > 0 ; --count ) {
                     AsmDataByte( *char_ptr++ );
                 }
-                for( count = tokbuf->tokens[cur_pos].u.value; count < no_of_bytes; ++count ) {
+                for( count = tokbuf->tokens[body_pos].u.value; count < no_of_bytes; ++count ) {
                     AsmDataByte( 0 );
                     char_ptr++;
                 }
@@ -367,7 +374,10 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
                 update_sizes( the_struct, first_init, no_of_bytes );
             }
 #endif
+            if( IS_OPEN_BRACKET( tokbuf->tokens[cur_pos].class ) )
+                cur_pos += 2;   /* skip body and closer; outer loop does cur_pos++ */
             break;
+          }
         case TC_ID:
           {
             token_idx           i;

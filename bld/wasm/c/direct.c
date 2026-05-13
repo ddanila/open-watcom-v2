@@ -191,12 +191,12 @@ static last_seg_info    lastseg;        // last opened simplified segment
 
 static char         code_segment_name[MAX_LINE_LEN];
 
-static asm_tok      const_CodeSize =  { TC_NUM, NULL,              0 };
-static asm_tok      const_DataSize =  { TC_NUM, NULL,              0 };
-static asm_tok      const_Model =     { TC_NUM, NULL,              0 };
-static asm_tok      const_Interface = { TC_NUM, NULL,              0 };
-static asm_tok      const_data =      { TC_ID,  NULL,              0 };
-static asm_tok      const_code =      { TC_ID,  code_segment_name, 0 };
+static asm_tok      const_CodeSize =  { TC_NUM, NULL,              0, { 0 } };
+static asm_tok      const_DataSize =  { TC_NUM, NULL,              0, { 0 } };
+static asm_tok      const_Model =     { TC_NUM, NULL,              0, { 0 } };
+static asm_tok      const_Interface = { TC_NUM, NULL,              0, { 0 } };
+static asm_tok      const_data =      { TC_ID,  NULL,              0, { 0 } };
+static asm_tok      const_code =      { TC_ID,  code_segment_name, 0, { 0 } };
 
 static const_info   info_CodeSize =  { &const_CodeSize,  1, true, false, false };
 static const_info   info_DataSize =  { &const_DataSize,  1, true, false, false };
@@ -1098,7 +1098,8 @@ static mangle_func  Check4Mangler( token_buffer *tokbuf, token_idx *i )
 {
     mangle_func     mangler;
 
-    if( !IS_STRING_TOKEN( tokbuf->tokens[*i].class ) )
+    /* mangler is always quoted, e.g. PROC ... 'C' */
+    if( tokbuf->tokens[*i].class != TC_STRING )
         return( NULL );
     mangler = GetMangler( tokbuf->tokens[*i].string_ptr );
     (*i)++;
@@ -1602,9 +1603,9 @@ bool SegDef( token_buffer *tokbuf, token_idx i )
             i++;
         }
         for( ; i < tokbuf->count; i++ ) {
-            if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+            if( tokbuf->tokens[i].class == TC_STRING ) {
                 /*
-                 * the class name - the only token which is of type STRING
+                 * the class name is always quoted, e.g. SEGMENT PARA PUBLIC 'CODE'
                  */
                 token = tokbuf->tokens[i].string_ptr;
                 new_info->class_name = InsertClassLname( token );
@@ -1793,12 +1794,13 @@ bool Include( token_buffer *tokbuf, token_idx i )
     switch( tokbuf->tokens[i].class ) {
     case TC_ID:
     case TC_STRING:
-    case TC_STRING_SQUOTE:
-    case TC_STRING_DQUOTE:
-    case TC_STRING_ANGLE:
-    case TC_STRING_BRACE:
+    case TC_BAREWORD:
     case TC_PATH:
         return( InputQueueFile( tokbuf->tokens[i].string_ptr ) );
+    case TC_OP_ANGLE:
+    case TC_OP_BRACE:
+        /* bracket triple: filename is the inner TC_RAW_TEXT body */
+        return( InputQueueFile( tokbuf->tokens[i + 1].string_ptr ) );
     default:
         AsmError( EXPECTED_FILE_NAME );
         return( RC_ERROR );
@@ -3364,9 +3366,9 @@ static bool proc_exam( dir_node_handle proc, token_buffer *tokbuf, token_idx i )
     i++;
     for( ; i < tokbuf->count && tokbuf->tokens[i].class != TC_COMMA; i++ ) {
         token = tokbuf->tokens[i].string_ptr;
-        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+        if( tokbuf->tokens[i].class == TC_STRING ) {
             /*
-             * name mangling
+             * name mangling -- always quoted, e.g. PROC ... 'C'
              */
             SetMangler( &proc->sym, GetMangler( token ), WASM_LANG_NONE );
             continue;

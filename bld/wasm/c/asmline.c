@@ -654,10 +654,8 @@ static void dbg_output( token_buffer *tokbuf )
                 DebugMsg(( " %d ", tokbuf->tokens[i].u.value ));
                 break;
             case TC_STRING:
-            case TC_STRING_SQUOTE:
-            case TC_STRING_DQUOTE:
-            case TC_STRING_ANGLE:
-            case TC_STRING_BRACE:
+            case TC_RAW_TEXT:
+            case TC_BAREWORD:
                 DebugMsg(( " '%s' ", tokbuf->tokens[i].string_ptr));
                 break;
             case TC_OP_SQ_BRACKET:
@@ -665,6 +663,12 @@ static void dbg_output( token_buffer *tokbuf )
                 break;
             case TC_CL_SQ_BRACKET:
                 DebugMsg(( " %s ", "]" ));
+                break;
+            case TC_OP_ANGLE:
+            case TC_OP_BRACE:
+            case TC_CL_ANGLE:
+            case TC_CL_BRACE:
+                DebugMsg(( " %s ", tokbuf->tokens[i].string_ptr ));
                 break;
             case TC_COLON:
                 DebugMsg(( " %s ", ":" ));

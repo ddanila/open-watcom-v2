@@ -238,7 +238,20 @@ bool ExpandProcString( token_buffer *tokbuf, token_idx index, bool *expanded )
                     continue;   /*yes, skip it */
                 }
             }
-            if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+            /*
+             * Re-serialise a token verbatim for the new line:
+             *   TC_STRING:  restore the original ' or " around the body so
+             *               re-lex sees the same string form.
+             *   TC_BAREWORD: wrap in <> so re-lex preserves raw-text
+             *               semantics rather than looking it up as a symbol.
+             *   Otherwise (TC_RAW_TEXT inside a triple, TC_OP_x / TC_CL_x,
+             *               or plain tokens): emit string_ptr as-is, since
+             *               bracket tokens already carry their bracket char.
+             */
+            if( tokbuf->tokens[i].class == TC_STRING ) {
+                char d = tokbuf->tokens[i].delim ? tokbuf->tokens[i].delim : '"';
+                p += sprintf( p, "%c%s%c", d, tokbuf->tokens[i].string_ptr, d );
+            } else if( tokbuf->tokens[i].class == TC_BAREWORD ) {
                 p += sprintf( p, "<%s>", tokbuf->tokens[i].string_ptr );
             } else {
                 p += sprintf( p, "%s", tokbuf->tokens[i].string_ptr );
@@ -272,6 +285,7 @@ bool ExpandProcString( token_buffer *tokbuf, token_idx index, bool *expanded )
     InputQueueLine( buffer );
     tokbuf->tokens[0].class = 0;
     tokbuf->tokens[0].string_ptr = NULL;
+    tokbuf->tokens[0].delim = 0;
     tokbuf->tokens[0].u.value = 0;
     *expanded = true;
     return( RC_OK );
@@ -332,6 +346,7 @@ bool StoreConstantNumber( const char *name, long value, bool redefine )
     new = MemAllocSafe( sizeof( asm_tok ) );
     memset( new[0].u.bytes, 0, sizeof( new[0].u.bytes ) );
     new[0].class = TC_NUM;
+    new[0].delim = 0;
     new[0].u.value = value;
     new[0].string_ptr = NULL;
     FreeConstData( dir->e.constinfo );
@@ -382,6 +397,7 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
             new = MemAllocSafe( sizeof( asm_tok ) );
             memset( new[0].u.bytes, 0, sizeof( new[0].u.bytes ) );
             new[0].class = TC_NUM;
+            new[0].delim = 0;
             new[0].u.value = 1;
             new[0].string_ptr = NULL;
             FreeConstData( dir->e.constinfo );
@@ -404,6 +420,15 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
             return( RC_ERROR );
 
         for( counta = 0, i = start; tokbuf->tokens[i].class != TC_FINAL; i++ ) {
+            /* Treat an empty bracket triple `<>` / `{}` like an empty
+             * TC_STRING/TC_BAREWORD: don't count it. (3 tokens contribute 0
+             * to counta; the new[] loop below skips them in lockstep.) */
+            if( IS_OPEN_BRACKET( tokbuf->tokens[i].class )
+              && tokbuf->tokens[i + 1].class == TC_RAW_TEXT
+              && tokbuf->tokens[i + 1].u.value == 0 ) {
+                i += 2;     /* +1 from loop, total +3 */
+                continue;
+            }
             if( !IS_STRING_TOKEN( tokbuf->tokens[i].class ) || ( tokbuf->tokens[i].u.value != 0 ) ) {
                 counta++;
             }
@@ -420,12 +445,21 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
         can_be_redefine = ( counta > 1 );
     }
     for( i = 0; i < count; i++ ) {
+        /* Skip an empty <>/{} triple in a multi-token EQU, mirroring the
+         * single-token skip below. A sole empty triple (count == 3) is
+         * preserved as the constant's value. */
+        if( count != 3
+          && IS_OPEN_BRACKET( tokbuf->tokens[start + i].class )
+          && tokbuf->tokens[start + i + 1].class == TC_RAW_TEXT
+          && tokbuf->tokens[start + i + 1].u.value == 0 ) {
+            i--;
+            count -= 3;
+            start += 3;
+            continue;
+        }
         switch( tokbuf->tokens[start + i].class ) {
         case TC_STRING:
-        case TC_STRING_SQUOTE:
-        case TC_STRING_DQUOTE:
-        case TC_STRING_ANGLE:
-        case TC_STRING_BRACE:
+        case TC_BAREWORD:
             if( count != 1 && tokbuf->tokens[start + i].u.value == 0 ) {
                 i--;
                 count--;
@@ -457,6 +491,7 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
             break;
         }
         new[i].class = tokbuf->tokens[start + i].class;
+        new[i].delim = tokbuf->tokens[start + i].delim;
         memcpy( new[i].u.bytes, tokbuf->tokens[start + i].u.bytes, sizeof( new[i].u.bytes ) );
         new[i].string_ptr = MemStrdupSafe( tokbuf->tokens[start + i].string_ptr );
     }

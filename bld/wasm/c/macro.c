@@ -870,13 +870,18 @@ bool ExpandMacro( token_buffer *tokbuf )
     info = dir->e.macroinfo;
 
     for( param = info->params.head; param != NULL; param = param->next ) {
+        bool        empty_bracket_triple;
+        empty_bracket_triple = IS_OPEN_BRACKET( tokbuf->tokens[i].class )
+          && tokbuf->tokens[i + 1].class == TC_RAW_TEXT
+          && strlen( tokbuf->tokens[i + 1].string_ptr ) == 0;
         p = buffer;
         if( i < tokbuf->count ) {
             if( tokbuf->tokens[i].class == TC_COMMA
               || ( IS_STRING_TOKEN( tokbuf->tokens[i].class )
-              && strlen( tokbuf->tokens[i].string_ptr ) == 0 ) ) {
+              && strlen( tokbuf->tokens[i].string_ptr ) == 0 )
+              || empty_bracket_triple ) {
                 /*
-                 * blank param
+                 * blank param: comma right away, empty quoted/raw token, or `<>` triple
                  */
                 if( param->required ) {
                     reset_paramslist( info->params.head );
@@ -890,7 +895,8 @@ bool ExpandMacro( token_buffer *tokbuf )
                     param->replace = MemStrdupSafe( param->def );
                 }
                 if( tokbuf->tokens[i].class != TC_COMMA ) {
-                    i++;
+                    /* step over the empty token; bracket triple is 3 tokens */
+                    i += empty_bracket_triple ? 3 : 1;
                     if( i < tokbuf->count
                       && tokbuf->tokens[i].class != TC_COMMA ) {
                         reset_paramslist( info->params.head );
@@ -937,12 +943,25 @@ bool ExpandMacro( token_buffer *tokbuf )
                             } else {
                                 p += sprintf( p, "%s", tokbuf->tokens[i].string_ptr );
                             }
+                        } else if( IS_OPEN_BRACKET( tokbuf->tokens[i].class ) ) {
+                            /*
+                             * Bracket triple: copy only the inner body. Brackets are
+                             * delimiters, not part of the arg value (this matches the
+                             * pre-redesign behavior where <text> lexed as a single
+                             * TC_RAW_TEXT with body "text"). delim stays 0 so the
+                             * substitution path treats this as raw text.
+                             */
+                            char *src = tokbuf->tokens[i + 1].string_ptr;
+                            while( *src != '\0' ) {
+                                *p++ = *src++;
+                            }
+                            i += 2;     /* skip body and closer; opener via outer i++ */
                         } else if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
                             char        *src;
 
                             if( arg_token_count == 0
-                              && IS_QUOTED_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
-                                arg_first_delim = STRING_TOKEN_DELIM( tokbuf->tokens[i].class );
+                              && tokbuf->tokens[i].class == TC_STRING ) {
+                                arg_first_delim = tokbuf->tokens[i].delim;
                             }
                             src = tokbuf->tokens[i].string_ptr;
                             while( *src != '\0' ) {
