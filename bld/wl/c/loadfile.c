@@ -598,7 +598,11 @@ void SetStkSize( void )
             }
         } else {
             if( !FmtData.dll
-              && StackSegPtr->size >= 0x200 ) {
+              && ( StackSegPtr->size >= 0x200
+                || ( (FmtData.type & MK_REAL_MODE) && StackSegPtr->size != 0 ) ) ) {
+                /* Real-mode OMF programs commonly declare deliberately small
+                 * stacks.  Microsoft LINK preserves that size; expanding it
+                 * changes SS:SP and can break resident DOS utilities. */
                 StackSize = StackSegPtr->size;
             } else {
                 StackSegPtr->size = StackSize;
