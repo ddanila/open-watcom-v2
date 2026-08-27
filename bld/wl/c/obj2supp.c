@@ -1343,6 +1343,7 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *target, segdata *s
     addr_type       target_addr;
     group_entry     *group;
     fix_type        ftype;
+    offset          linear;
 
     /* unused parameters */ (void)target;
 
@@ -1744,12 +1745,25 @@ static bool formatBaseReloc( fix_relo_data *fix, target_spec *target, segdata *s
         return( false );
     }
 #endif
-    MakeBase( fix );
-    breloc->item.dos.addr.off = fix->loc_addr.off;
     group = seg->u.leader->group;
-    breloc->item.dos.addr.seg = group->addr.seg;
-    if( group->section != Root ) {
-        breloc->item.dos.addr.seg -= group->section->sect_addr.seg;
+    MakeBase( fix );
+    if( (FmtData.type & MK_REAL_MODE) && group->totalsize > _64K ) {
+        /* A DOS relocation location is itself a 16:16 address.  Group-based
+         * bookkeeping leaves locations beyond 64 KiB as an oversized offset;
+         * normalize it instead of truncating the high bits. */
+        linear = MK_REAL_ADDR( fix->loc_addr.seg, fix->loc_addr.off );
+        if( group->section != Root ) {
+            linear -= MK_REAL_ADDR( group->section->sect_addr.seg,
+                                    group->section->sect_addr.off );
+        }
+        breloc->item.dos.addr.off = linear & 0x0f;
+        breloc->item.dos.addr.seg = linear >> FmtData.SegShift;
+    } else {
+        breloc->item.dos.addr.off = fix->loc_addr.off;
+        breloc->item.dos.addr.seg = group->addr.seg;
+        if( group->section != Root ) {
+            breloc->item.dos.addr.seg -= group->section->sect_addr.seg;
+        }
     }
     return( true );
 }
@@ -1862,6 +1876,8 @@ static void BuildReloc( save_fixup *save, target_spec *target, frame_spec *frame
 {
     fix_relo_data   fix;
     addr_type       frame_addr;
+    segdata         *target_seg;
+    group_entry     *target_group;
     fix_type        fixtype = save->u.sdata.flags;
     offset          off = save->u.fixup.off;
 
@@ -1870,6 +1886,23 @@ static void BuildReloc( save_fixup *save, target_spec *target, frame_spec *frame
     memset( &fix, 0, sizeof( fix_relo_data ) );        // to get all bitfields 0
     GetTargetAddr( target, &fix.target_addr );
     GetFrameAddr( frame, &frame_addr, &fix.target_addr, off );
+    if( (FmtData.type & MK_REAL_MODE) && target->type == FIX_TARGET_EXT ) {
+        target_seg = GetTargetSegData( target );
+        if( target_seg != NULL ) {
+            target_group = target_seg->u.leader->group;
+            if( target_group != NULL && target_group->totalsize > _64K
+                && ( (fixtype & FIX_BASE)
+                    || (frame->type == FIX_FRAME_EXT
+                        && frame->u.sym == target->u.sym) ) ) {
+                /* An explicit external frame denotes the symbol's member
+                 * segment, as does the segment half of a far pointer.  The
+                 * distinction from the containing group only matters when a
+                 * legacy real-mode group spans more than 64 KiB. */
+                frame_addr.seg = target_seg->u.leader->seg_addr.seg;
+                frame_addr.off = target_seg->u.leader->seg_addr.off;
+            }
+        }
+    }
     fix.type = fixtype;
     fix.loc_addr = CurrRec.addr;
     fix.loc_addr.off += off;

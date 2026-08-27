@@ -492,7 +492,12 @@ static void CalcGrpAddr( group_entry *group )
             if( (FmtData.type & MK_REAL_MODE)
               && (seg->info & SEGINF_USE_32) == 0
               && (info.end_offs - info.start_offs > _64K) ) {
-                LnkMsg( ERR+MSG_GROUP_TOO_BIG, "sl", group->sym->name,
+                /* Microsoft LINK permits legacy real-mode groups whose
+                 * members span more than 64 KiB.  Their 16-bit offsets wrap,
+                 * but segment-relative fixups and explicitly addressed
+                 * members remain well-defined.  Warn instead of rejecting
+                 * such images so compatible DOS programs can be linked. */
+                LnkMsg( WRN+MSG_GROUP_TOO_BIG, "sl", group->sym->name,
                         info.end_offs - info.start_offs - _64K );
             }
             group->totalsize = info.end_offs - info.start_offs;
@@ -542,11 +547,30 @@ void ConvertToFrame( addr_type *frame_addr, segment frame, bool check_16bit )
 /***************************************************************************/
 {
     unsigned long   off;
+    group_entry     *group;
+    unsigned long   linear;
+    unsigned long   group_base;
+    bool            legacy_group_offset;
 
     if( FmtData.type & MK_REAL_MODE ) {
         off = MK_REAL_ADDR( (int)( frame_addr->seg - frame ), frame_addr->off );
-        if( check_16bit
-          && ( off >= 0x10000 )) {
+        legacy_group_offset = false;
+        if( check_16bit && ( off >= 0x10000 ) ) {
+            linear = MK_REAL_ADDR( frame_addr->seg, frame_addr->off );
+            for( group = Groups; group != NULL; group = group->next_group ) {
+                group_base = MK_REAL_ADDR( group->addr.seg, group->addr.off );
+                if( group->addr.seg == frame && group->totalsize > _64K
+                    && linear >= group_base
+                    && linear - group_base < group->totalsize ) {
+                    /* Microsoft LINK accepts 16-bit group-relative fixups in
+                     * oversized real-mode groups and stores the wrapped low
+                     * word.  Several historical DOS programs rely on this. */
+                    legacy_group_offset = true;
+                    break;
+                }
+            }
+        }
+        if( check_16bit && ( off >= 0x10000 ) && !legacy_group_offset ) {
             LnkMsg( ERR+LOC+MSG_FRAME_INVALID, "Ax", frame_addr, frame );
         }
         frame_addr->off = off;
