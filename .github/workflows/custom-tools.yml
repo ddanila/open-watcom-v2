@@ -3,6 +3,9 @@ run-name: Build custom Linux host tools
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - custom
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
