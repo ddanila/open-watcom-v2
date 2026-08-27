@@ -1,0 +1,22 @@
+name: Custom host tools
+run-name: Build custom Linux host tools
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-x64:
+    name: Linux x64 GCC
+    uses: ./.github/workflows/buildx.yml
+    with:
+      args: gcc
+      suffix: custom-lnx-x64-gcc
+      gitpath: rel
+      owtools: GCC
+      image: ubuntu-latest
+      docbuild: ''
+      run_tests: ''
