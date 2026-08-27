@@ -557,7 +557,7 @@ void ConvertToFrame( addr_type *frame_addr, segment frame, bool check_16bit )
         legacy_group_offset = false;
         if( check_16bit && ( off >= 0x10000 ) ) {
             linear = MK_REAL_ADDR( frame_addr->seg, frame_addr->off );
-            for( group = Groups; group != NULL; group = group->next_group ) {
+            for( group = Groups; group != NULL; group = group->next ) {
                 group_base = MK_REAL_ADDR( group->addr.seg, group->addr.off );
                 if( group->addr.seg == frame && group->totalsize > _64K
                     && linear >= group_base
