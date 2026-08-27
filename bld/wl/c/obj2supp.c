@@ -1948,7 +1948,13 @@ static void BuildReloc( save_fixup *save, target_spec *target, frame_spec *frame
     }
     if( !fix.imported ) {
         if( fix.fpp_type == FPP_NONE ) {
-            ConvertToFrame( &fix.target_addr, frame_addr.seg, ( (fixtype & (FIX_OFFSET_8 | FIX_OFFSET_16)) != 0 ) );
+            /* Absolute symbols are constants, not addresses constrained by
+             * the selected frame.  Negative 16-bit constants such as -1 are
+             * represented in addr_type as 0xffffffff and must wrap when the
+             * fixup is written, just as MASM/LINK historically allowed. */
+            ConvertToFrame( &fix.target_addr, frame_addr.seg,
+                ( (fixtype & (FIX_OFFSET_8 | FIX_OFFSET_16)) != 0 )
+                && !IsTargAbsolute( target ) );
         } else {
             fix.target_addr.seg = frame_addr.seg;
         }
