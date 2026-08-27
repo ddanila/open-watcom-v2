@@ -23,3 +23,15 @@ jobs:
       image: ubuntu-latest
       docbuild: ''
       run_tests: ''
+
+  macos-arm64:
+    name: macOS arm64 Clang
+    uses: ./.github/workflows/buildx.yml
+    with:
+      args: clang
+      suffix: custom-osx-a64-clang
+      gitpath: rel
+      owtools: CLANG
+      image: macos-15
+      docbuild: ''
+      run_tests: ''
